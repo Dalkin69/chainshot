@@ -169,10 +169,11 @@ async function captureTab({ note } = {}) {
     const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
     const tag = state.settings.tag || '';
     const text = (note ?? state.settings.nextNote) || '';
-    const seq = c.entries.length + 1;
+    const seq = c.entries.length + 1; // journal entry number (entry 1 is the case creation note)
+    const shotNo = c.entries.filter((e) => e.type === 'screenshot' || e.type === 'browser').length + 1;
     const stamp = now.toISOString().replace('T', ' ').slice(0, 19);
     const lines = [
-      `#${seq} | ${c.meta.case} | ${tag} | ${stamp} UTC | ${c.meta.examiner}`,
+      `#${seq} (capture ${shotNo}) | ${c.meta.case} | ${tag} | ${stamp} UTC | ${c.meta.examiner}`,
       `URL: ${tab.url || ''}`,
       `Title: ${tab.title || ''}`,
     ];
