@@ -27,20 +27,24 @@ def failures(log_path: str) -> None:
 
 
 def thumbnail(png_path: str, title: str) -> None:
-    # Pillow is installed by the workflow step right before this call.
-    from PIL import Image
-    im = Image.open(png_path).convert("RGB")
-    im.thumbnail((640, 640))
-    buf = io.BytesIO()
-    im.save(buf, "JPEG", quality=55)
-    b64 = base64.b64encode(buf.getvalue()).decode()
-    print(f"::notice title={esc(title)} ({im.width}x{im.height}, {len(b64)} b64 chars)::{b64}")
-    # Full-resolution crop of the bottom strip, where the evidence banner is drawn.
+    """Emit the bottom strip of a capture (where the banner is) as base64 chunks.
+
+    Annotation messages are cut at 4096 characters and a step keeps at most 10
+    notices, so the image is sent as up to 9 numbered chunks of 4000 characters.
+    """
+    from PIL import Image  # installed by the workflow step right before this call
     full = Image.open(png_path).convert("RGB")
-    strip = full.crop((0, max(0, full.height - 110), min(full.width, 1100), full.height))
-    buf = io.BytesIO()
-    strip.save(buf, "PNG", optimize=True)
-    print(f"::notice title={esc(title)} banner ({strip.width}x{strip.height})::{base64.b64encode(buf.getvalue()).decode()}")
+    strip = full.crop((0, max(0, full.height - 100), min(full.width, 1000), full.height))
+    for quality in (70, 55, 40, 25):
+        buf = io.BytesIO()
+        strip.save(buf, "JPEG", quality=quality)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        if len(b64) <= 9 * 4000:
+            break
+    chunks = [b64[i:i + 4000] for i in range(0, len(b64), 4000)][:9]
+    print(f"::notice title={esc(title)} size::{full.width}x{full.height}")
+    for i, c in enumerate(chunks, 1):
+        print(f"::notice title={esc(title)} chunk {i}/{len(chunks)}::{c}")
 
 
 if __name__ == "__main__":
