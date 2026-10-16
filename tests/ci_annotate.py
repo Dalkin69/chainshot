@@ -27,7 +27,7 @@ def failures(log_path: str) -> None:
 
 
 def thumbnail(png_path: str, title: str) -> None:
-    # Pillow is not needed on Windows: this branch is only called where it is installed.
+    # Pillow is installed by the workflow step right before this call.
     from PIL import Image
     im = Image.open(png_path).convert("RGB")
     im.thumbnail((640, 640))
@@ -35,6 +35,12 @@ def thumbnail(png_path: str, title: str) -> None:
     im.save(buf, "JPEG", quality=55)
     b64 = base64.b64encode(buf.getvalue()).decode()
     print(f"::notice title={esc(title)} ({im.width}x{im.height}, {len(b64)} b64 chars)::{b64}")
+    # Full-resolution crop of the bottom strip, where the evidence banner is drawn.
+    full = Image.open(png_path).convert("RGB")
+    strip = full.crop((0, max(0, full.height - 110), min(full.width, 1100), full.height))
+    buf = io.BytesIO()
+    strip.save(buf, "PNG", optimize=True)
+    print(f"::notice title={esc(title)} banner ({strip.width}x{strip.height})::{base64.b64encode(buf.getvalue()).decode()}")
 
 
 if __name__ == "__main__":

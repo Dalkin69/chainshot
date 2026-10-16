@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chainshot"
+version = "1.0.0"
+description = "Tamper-evident, hash-chained journal for forensic screenshots and files: verify, seal (RFC 3161), HTML report."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Dalkin69" }]
+requires-python = ">=3.9"
+dependencies = []
+keywords = ["forensics", "dfir", "evidence", "chain-of-custody", "rfc3161", "screenshot"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Security",
+]
+
+[project.urls]
+Homepage = "https://github.com/Dalkin69/chainshot"
+Issues = "https://github.com/Dalkin69/chainshot/issues"
+
+[project.scripts]
+chainshot = "chainshot:main"
+
+[tool.setuptools]
+py-modules = ["chainshot"]

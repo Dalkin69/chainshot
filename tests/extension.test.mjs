@@ -110,9 +110,13 @@ test('captures a page into a case folder that chainshot.py verifies', async () =
   assert.equal(journal.length, 3);
   assert.ok(fs.existsSync(path.join(dir, 'chainshot-case.json')));
   const png = path.join(dir, entry.file);
+  // The extension records the size of the raw tab capture; the PNG must have the same
+  // width and be taller (banner added below). The headless window size varies, so the
+  // test does not assume a fixed viewport.
   const { width, height } = pngSize(png);
-  assert.equal(width, 1000);
-  assert.ok(height > 700, 'banner is added below the page');
+  const [shotW, shotH] = entry.extra.viewport.split('x').map(Number);
+  assert.equal(width, shotW);
+  assert.ok(height > shotH, `banner is added below the page (capture ${shotW}x${shotH}, PNG ${width}x${height})`);
 
   const ok = pyVerify(dir);
   assert.equal(ok.code, 0, ok.out);
