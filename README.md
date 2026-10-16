@@ -183,6 +183,9 @@ DEMO-01/
 └── report/index.html         generated view, not evidence
 ```
 
+Entry `#1` of every journal is the *Case created* note, so the first capture is `#2 (capture 1)`: the `#` number is
+the journal entry, the one to quote in a report.
+
 Do **not** open `journal.jsonl` in Excel and save it: that rewrites the file. Use `chainshot.py export-csv` for a spreadsheet view.
 
 ## Reference

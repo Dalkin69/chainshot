@@ -167,6 +167,17 @@ Describe 'ChainShot' {
             Test-ChainShotCase -CasePath $c -Quiet | Should -BeTrue
         }
 
+        It 'creates a Start menu shortcut that uses the ChainShot icon' {
+            if (-not $script:IsWin) { Set-ItResult -Skipped -Because 'Windows only'; return }
+            Install-ChainShotShortcut | Out-Null
+            $path = Join-Path ([Environment]::GetFolderPath('Programs')) 'ChainShot.lnk'
+            try {
+                $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($path)
+                $lnk.IconLocation | Should -Match 'chainshot\.ico,0$'
+                Test-Path ($lnk.IconLocation -replace ',0$', '') | Should -BeTrue
+            } finally { Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue }
+        }
+
         It 'starts the tray application and registers its hotkeys' {
             if (-not $script:IsWin) { Set-ItResult -Skipped -Because 'Windows only'; return }
             if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') { Set-ItResult -Skipped -Because 'needs an STA thread'; return }
