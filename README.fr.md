@@ -151,6 +151,9 @@ DEMO-01/
 └── report/index.html         vue générée, pas une preuve
 ```
 
+L'entrée `#1` de chaque journal est la note *Case created* : la première capture porte donc `#2 (capture 1)`. Le
+numéro `#` est celui de l'entrée du journal, à citer dans un rapport.
+
 N'ouvrez **pas** `journal.jsonl` dans Excel pour l'enregistrer : cela réécrit le fichier. Utilisez
 `chainshot.py export-csv` pour une vue tableur.
 

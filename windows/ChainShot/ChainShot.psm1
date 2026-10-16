@@ -764,10 +764,14 @@ function Invoke-ChainShot {
     $extra.bounds = '{0},{1},{2},{3}' -f $bounds.X, $bounds.Y, $bounds.Width, $bounds.Height
 
     $meta = Get-CaseMeta $CasePath
-    $seq = (Read-ChainShotJournal -CasePath $CasePath).Count + 1
-    $lines = @(('#{0} | {1} | {2} | {3} UTC ({4}) | {5} @ {6}' -f $seq, $meta.case, $Tag,
+    # Banner number = journal entry number (entry 1 is the case creation note);
+    # the capture number counts screenshots only.
+    $journal = @(Read-ChainShotJournal -CasePath $CasePath)
+    $seq = $journal.Count + 1
+    $shotNo = @($journal | Where-Object { @('screenshot', 'browser') -contains (Get-FieldValue $_ 'type') }).Count + 1
+    $lines = @(('#{0} (capture {7}) | {1} | {2} | {3} UTC ({4}) | {5} @ {6}' -f $seq, $meta.case, $Tag,
                 $utc.ToString('yyyy-MM-dd HH:mm:ss', $script:Invariant), $utc.ToLocalTime().ToString('HH:mm:ss zzz', $script:Invariant),
-                $meta.examiner, [System.Environment]::MachineName))
+                $meta.examiner, [System.Environment]::MachineName, $shotNo))
     if ($title) { $lines += ('Window: {0} [{1}]' -f $title, $extra.process) }
     if ($Note) { $lines += ('Note: ' + $Note) }
     $final = Add-Banner $shot $lines
@@ -802,6 +806,22 @@ function Get-ChainShotPython {
     return [pscustomobject]@{ Exe = $exe.Source; Script = (Resolve-Path -LiteralPath $script).ProviderPath }
 }
 
+function Open-InBrowser([string]$Path) {
+    # The .html file association may point to an editor (VS Code, Notepad++): open the
+    # report with the browser registered for https links instead.
+    $uri = ([System.Uri](Resolve-Path -LiteralPath $Path).ProviderPath).AbsoluteUri
+    if ($script:IsWin) {
+        try {
+            $key = 'HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice'
+            $progId = (Get-ItemProperty -Path $key -ErrorAction Stop).ProgId
+            $command = (Get-ItemProperty -Path "Registry::HKEY_CLASSES_ROOT\$progId\shell\open\command" -ErrorAction Stop).'(default)'
+            if ($command -match '^\s*"([^"]+)"') { $exe = $Matches[1] } else { $exe = ($command -split '\s+')[0] }
+            if ($exe -and (Test-Path -LiteralPath $exe)) { Start-Process -FilePath $exe -ArgumentList ('"{0}"' -f $uri); return }
+        } catch { Write-Verbose "Default browser not found, using the file association: $_" }
+    }
+    Invoke-Item -LiteralPath $Path
+}
+
 function Export-ChainShotReport {
     <#
     .SYNOPSIS
@@ -814,7 +834,7 @@ function Export-ChainShotReport {
     if (-not $py) { throw 'Python 3.9+ and chainshot.py are required for the HTML report (see README).' }
     & $py.Exe $py.Script report $CasePath
     $html = Join-Path $CasePath 'report/index.html'
-    if ($Open -and (Test-Path -LiteralPath $html)) { Invoke-Item -LiteralPath $html }
+    if ($Open -and (Test-Path -LiteralPath $html)) { Open-InBrowser $html }
     return $html
 }
 
@@ -823,7 +843,11 @@ function Export-ChainShotReport {
 # --------------------------------------------------------------------------
 
 function New-TrayIcon {
-    # Draws the tray icon at runtime (a lens over two chain links): no binary asset needed.
+    # Uses chainshot.ico shipped with the module; draws a fallback if it is missing.
+    $ico = Join-Path $PSScriptRoot 'chainshot.ico'
+    if (Test-Path -LiteralPath $ico) {
+        return New-Object System.Drawing.Icon ($ico, [System.Windows.Forms.SystemInformation]::SmallIconSize)
+    }
     $bmp = New-Object System.Drawing.Bitmap 32, 32
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = 'AntiAlias'
@@ -1000,6 +1024,8 @@ function Install-ChainShotShortcut {
     foreach ($dir in $targets) {
         $lnk = $ws.CreateShortcut((Join-Path $dir 'ChainShot.lnk'))
         $lnk.TargetPath = $exe; $lnk.Arguments = $arguments; $lnk.WindowStyle = 7
+        $ico = Join-Path $PSScriptRoot 'chainshot.ico'
+        if (Test-Path -LiteralPath $ico) { $lnk.IconLocation = "$ico,0" }
         $lnk.Description = 'ChainShot - timestamped, hash-chained forensic screenshots'
         $lnk.Save()
         Write-Host "Shortcut created: $(Join-Path $dir 'ChainShot.lnk')"

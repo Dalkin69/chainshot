@@ -2,6 +2,15 @@
 
 All notable changes are listed here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Windows: the HTML report opens in the default web browser, even when `.html` files are
+  associated with an editor such as VS Code.
+- Windows: the Start menu shortcut and the tray use the ChainShot icon (`chainshot.ico`)
+  instead of the PowerShell icon.
+- Banners show the capture number next to the journal entry number: `#2 (capture 1)`.
+
 ## [1.0.0] - 2026-10-16
 
 First public release.
