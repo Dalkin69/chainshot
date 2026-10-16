@@ -23,7 +23,7 @@ namespace ChainShot
         readonly GuiSettings settings = GuiSettings.Load();
         readonly SharedState state = SharedState.Load();
         CaseFolder current;
-        bool quitting, busy, startHidden;
+        bool quitting, busy, startHidden, verifyPending;
         DateTime? lastFullVerify;
 
         // header
@@ -442,6 +442,11 @@ namespace ChainShot
             UseWaitCursor = value;
             foreach (var c in caseControls) c.Enabled = !value && current != null;
             if (message != null) SetStatus(message);
+            if (!value && verifyPending)
+            {
+                verifyPending = false;
+                if (IsHandleCreated) BeginInvoke(new Action(() => VerifyFull(false))); else VerifyFull(false);
+            }
         }
 
         // ------------------------------------------------------------------- cases
@@ -476,6 +481,8 @@ namespace ChainShot
 
         public void OpenCase(string path, bool remember)
         {
+            if (current != null && CaseFolder.IsCase(path) &&
+                string.Equals(Path.GetFullPath(path).TrimEnd('\\'), current.Root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) return;
             CaseFolder folder;
             try { folder = CaseFolder.Open(path); }
             catch (Exception ex) { Ui.Error(this, ex.Message); return; }
@@ -648,14 +655,15 @@ namespace ChainShot
 
         async void VerifyFull(bool showResult)
         {
-            if (current == null || busy) return;
+            if (current == null) return;
+            if (busy) { verifyPending = true; return; } // run again when the current task ends
             var folder = current;
             SetBusy(true, "Verifying every file, the hash chain and the seals...");
             VerifyResult res = null;
             try { res = await Task.Run(() => Verifier.Verify(folder, true)); }
             catch (Exception ex) { Inform("Verification error: " + ex.Message, true); }
             finally { SetBusy(false); }
-            if (res == null || folder != current) return;
+            if (res == null || current == null || folder.Root != current.Root) return;
             ReloadJournal(false);
             foreach (DataGridViewRow row in grid.Rows)
             {

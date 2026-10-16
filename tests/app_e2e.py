@@ -39,6 +39,8 @@ ENV = dict(os.environ, CHAINSHOT_CONFIG_DIR=str(CONFIG), APPDATA=str(CONFIG.pare
 PWSH = shutil.which("pwsh") or shutil.which("powershell")
 
 results = []
+SKIPPED = set()
+TSA_URL = None
 
 
 def esc(t: str) -> str:
@@ -191,8 +193,10 @@ def tampering_is_detected():
 
 @test
 def seal_with_local_rfc3161_tsa():
+    global TSA_URL  # the server stays up for the demo case (daemon thread)
     if not pytests.OPENSSL:
         print("  (skipped: OpenSSL >= 1.1.1 not found)")
+        SKIPPED.add("seal_with_local_rfc3161_tsa")
         return
     tsa = OUT / "tsa"
     tsa.mkdir(exist_ok=True)
@@ -200,19 +204,15 @@ def seal_with_local_rfc3161_tsa():
     pytests.TsaHandler.workdir = tsa
     server = http.server.HTTPServer(("127.0.0.1", 0), pytests.TsaHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    try:
-        url = f"http://127.0.0.1:{server.server_port}/tsr"
-        code, out = run("seal", CASE, "--tsa", url)
-        assert "RFC 3161 timestamp:" in out, out
-        code, out = run("verify", CASE)
-        assert "imprint OK" in out, out
-        # The token signature is checked by the reference implementation.
-        assert py_verify(CASE, "--tsa-ca", str(tsa / "ca.crt")) == 0
-        code, out = run("seal", CASE, "--tsa", "http://127.0.0.1:9/tsr", ok=(1,))
-        assert "timestamp failed" in out, out
-    finally:
-        server.shutdown()
-        server.server_close()
+    url = TSA_URL = f"http://127.0.0.1:{server.server_port}/tsr"
+    code, out = run("seal", CASE, "--tsa", url)
+    assert "RFC 3161 timestamp:" in out, out
+    code, out = run("verify", CASE)
+    assert "imprint OK" in out, out
+    # The token signature is checked by the reference implementation.
+    assert py_verify(CASE, "--tsa-ca", str(tsa / "ca.crt")) == 0
+    code, out = run("seal", CASE, "--tsa", "http://127.0.0.1:9/tsr", ok=(1,))
+    assert "timestamp failed" in out, out
 
 
 @test
@@ -236,7 +236,36 @@ def gui_smoke_test():
         print(f"::warning title=Hotkeys::not registered: {info['hotkeys_failed']}")
 
 
+@test
+def demo_case_screenshot():
+    """A clean case for the README screenshot (docs/img/app-window.png)."""
+    d = OUT / "demo"
+    run("new-case", d, "--case", "DEMO-01 Workstation PC-042", "--examiner", "Analyst")
+    image = OUT / "PC-042.E01"
+    image.write_bytes(b"ChainShot demo - not a real disk image\n" * 2000)
+    run("add", image, "--copy", "--tag", "P00", "--note", "Disk image received from the client (demo file)")
+    run("note", "Write blocker attached, acquisition hash checked against the chain of custody form", "--tag", "P01")
+    run("capture", "--mode", "screen", "--tag", "P02", "--note", "Desktop at the start of the analysis")
+    run("capture", "--rect", "0,0,480,300", "--tag", "P03", "--note", "Detail of the taskbar area")
+    run("note", "Timeline analysis started", "--tag", "P04")
+    if pytests.OPENSSL and TSA_URL:
+        run("seal", d, "--tsa", TSA_URL)
+    else:
+        run("seal", d)
+    run("note", "Report delivered to the client", "--tag", "END")
+    run("tag", "P05")
+    _, out = run("tag")
+    assert out.strip().endswith("P05"), out
+    png = OUT / "app-demo.png"
+    code, out = run("--smoke-test", png, "--case", d, timeout=90)
+    info = json.loads(out.strip().splitlines()[-1])
+    assert "intact" in info["chip"], info  # the full verification finished and passed
+
+
 failed = [(n, tb) for n, tb in results if tb]
+skips = [name for name, tb in results if not tb and name in SKIPPED]
+if skips:
+    print(f"::notice title=ChainShot.exe e2e skipped::{', '.join(skips)}")
 print(f"::notice title=ChainShot.exe e2e::passed={len(results) - len(failed)} failed={len(failed)}")
 for name, tb in failed:
     print(f"::error title=app e2e {name}::{esc(tb[-3500:])}")

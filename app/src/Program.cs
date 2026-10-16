@@ -25,6 +25,7 @@ Command line (the current case is the one selected in the app or with Set-ChainS
   capture  [--mode screen|all|window|region] [--rect x,y,w,h] [--delay <s>] [--tag <t>] [--note <n>] [--case <folder>]
   add      <file>... [--copy] [--tag <t>] [--note <n>] [--case <folder>]
   note     <text> [--tag <t>] [--case <folder>]
+  tag      [<tag>]                    show or set the tag of the next entries ("" to clear)
   verify   [<folder>] [--json]
   seal     [<folder>] [--tsa [<url>]] [--tag <t>]
   report   [<folder>] [--out <file.html>] [--open]
@@ -174,6 +175,18 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
                     st.CasePath = folder.Root;
                     st.Save();
                     w.WriteLine("Case created: " + folder.Root + " (now the current case)");
+                    return 0;
+                }
+
+                case "tag":
+                {
+                    var st = SharedState.Load();
+                    if (o.Positional.Count > 0)
+                    {
+                        st.Tag = o.Positional[0].Trim();
+                        st.Save();
+                    }
+                    w.WriteLine("Current tag: " + st.Tag);
                     return 0;
                 }
 
