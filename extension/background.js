@@ -73,6 +73,9 @@ async function writeFile(relativePath, mime, bytes) {
   const url = `data:${mime};base64,${bytesToBase64(bytes)}`;
   const id = await chrome.downloads.download({ url, filename: relativePath, conflictAction: 'overwrite', saveAs: false });
   await waitForDownload(id);
+  // Remove the entry from the browser's download list (the file stays on disk):
+  // the journal is rewritten after every entry and would flood the list.
+  await chrome.downloads.erase({ id }).catch(() => {});
   return id;
 }
 

@@ -1,0 +1,47 @@
+# Builds the release packages when a version tag (v1.2.3) is pushed, after running the tests.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build packages
+        run: |
+          set -euo pipefail
+          v="${GITHUB_REF_NAME}"
+          mkdir -p dist/win/ChainShot dist/ext
+          cp -r windows/ChainShot/* dist/win/ChainShot/
+          cp python/chainshot.py dist/win/ChainShot/
+          cp windows/Install-ChainShot.ps1 windows/README.md LICENSE dist/win/
+          (cd dist/win && zip -qr "../chainshot-windows-${v}.zip" .)
+          cp -r extension/* dist/ext/
+          cp LICENSE dist/ext/
+          (cd dist/ext && zip -qr "../chainshot-extension-${v}.zip" .)
+          cp python/chainshot.py dist/chainshot.py
+          (cd dist && sha256sum chainshot-windows-${v}.zip chainshot-extension-${v}.zip chainshot.py > SHA256SUMS.txt)
+          cat dist/SHA256SUMS.txt
+      - name: Release notes from CHANGELOG
+        run: |
+          awk -v ver="${GITHUB_REF_NAME#v}" '
+            $0 ~ "^## \\[" ver "\\]" {on=1; next}
+            on && /^## \[/ {exit}
+            on {print}' CHANGELOG.md > notes.md
+          printf '\n---\nVerify downloads with `sha256sum -c SHA256SUMS.txt`.\n' >> notes.md
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "ChainShot $GITHUB_REF_NAME" --notes-file notes.md \
+            dist/chainshot-windows-*.zip dist/chainshot-extension-*.zip dist/chainshot.py dist/SHA256SUMS.txt
