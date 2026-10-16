@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "ChainShot - forensic web captures",
+  "short_name": "ChainShot",
+  "version": "1.0.0",
+  "description": "Timestamped, hash-chained screenshots of web pages (URL, title, UTC time, SHA-256) for forensic and investigation reports.",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "downloads", "storage"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": {
+    "default_title": "ChainShot",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "commands": {
+    "capture-tab": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Capture the visible tab into the ChainShot journal"
+    }
+  }
+}

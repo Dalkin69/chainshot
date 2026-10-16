@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ChainShot</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon32.png" alt="" width="24" height="24">
+    <div>
+      <h1>ChainShot</h1>
+      <p id="caseLine" class="muted">No case</p>
+    </div>
+  </header>
+
+  <section id="newCase" hidden>
+    <h2>New case</h2>
+    <label>Case name or reference<input id="caseName" placeholder="TP Forensic - PC-COMPTA01" autocomplete="off"></label>
+    <label>Examiner<input id="examiner" placeholder="Your name" autocomplete="off"></label>
+    <div class="row">
+      <button id="createCase" class="primary">Create case</button>
+      <button id="cancelCase" class="ghost">Cancel</button>
+    </div>
+    <p class="muted small">Files are saved in your Downloads folder under <code>ChainShot/</code>.</p>
+  </section>
+
+  <section id="main" hidden>
+    <div class="grid">
+      <label>Tag<input id="tag" placeholder="P17" autocomplete="off"></label>
+      <label>Case<select id="caseSelect"></select></label>
+    </div>
+    <label>Note <span class="muted">(used once, then cleared)</span><textarea id="note" rows="2" placeholder="What this capture shows"></textarea></label>
+    <div class="row">
+      <button id="capture" class="primary">Capture tab <kbd id="shortcut">Alt+Shift+S</kbd></button>
+      <button id="logNote" class="ghost" title="Add the note to the journal without a capture">Log note</button>
+    </div>
+    <div id="last" class="card" hidden></div>
+    <div class="row tools">
+      <button id="verify" class="link">Verify chain</button>
+      <button id="rewrite" class="link">Rewrite journal file</button>
+      <button id="showNewCase" class="link">New case</button>
+    </div>
+    <p id="folder" class="muted small"></p>
+  </section>
+
+  <p id="message" role="status"></p>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
