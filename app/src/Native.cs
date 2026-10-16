@@ -51,6 +51,15 @@ namespace ChainShot
             return System.Drawing.Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
         }
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd, StringBuilder name, int max);
+
+        public static string GetClassName(IntPtr hWnd)
+        {
+            var sb = new StringBuilder(256);
+            GetClassName(hWnd, sb, sb.Capacity);
+            return sb.ToString();
+        }
+
         public static string GetTitle(IntPtr hWnd)
         {
             var sb = new StringBuilder(512);

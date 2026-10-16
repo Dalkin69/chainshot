@@ -34,7 +34,7 @@ namespace ChainShot
 
         // capture bar
         readonly ComboBox tagBox = new ComboBox { Width = 110, DropDownStyle = ComboBoxStyle.DropDown };
-        readonly TextBox noteBox = new TextBox { Width = 330 };
+        readonly TextBox noteBox = new TextBox { Width = 260 };
         readonly NumericUpDown delayBox = new NumericUpDown { Width = 48, Minimum = 0, Maximum = 60 };
         readonly List<Control> caseControls = new List<Control>();
 
@@ -121,10 +121,10 @@ namespace ChainShot
             file.DropDownOpening += (s, e) => RefreshRecentMenu();
 
             var cap = new ToolStripMenuItem("&Capture");
-            cap.DropDownItems.Add(CaseItem(Item("&Screen under the mouse", (s, e) => DoCapture(CaptureMode.Screen, false), Keys.None, "Ctrl+Alt+P")));
-            cap.DropDownItems.Add(CaseItem(Item("Active &window", (s, e) => DoCapture(CaptureMode.Window, false), Keys.None, "Ctrl+Alt+W")));
-            cap.DropDownItems.Add(CaseItem(Item("&Region...", (s, e) => DoCapture(CaptureMode.Region, false), Keys.None, "Ctrl+Alt+R")));
-            cap.DropDownItems.Add(CaseItem(Item("&All screens", (s, e) => DoCapture(CaptureMode.AllScreens, false))));
+            cap.DropDownItems.Add(CaseItem(Item("&Screen under the mouse", (s, e) => DoCapture(CaptureMode.Screen, Source.App), Keys.None, "Ctrl+Alt+P")));
+            cap.DropDownItems.Add(CaseItem(Item("Last active &window", (s, e) => DoCapture(CaptureMode.Window, Source.App), Keys.None, "Ctrl+Alt+W")));
+            cap.DropDownItems.Add(CaseItem(Item("&Region...", (s, e) => DoCapture(CaptureMode.Region, Source.App), Keys.None, "Ctrl+Alt+R")));
+            cap.DropDownItems.Add(CaseItem(Item("&All screens", (s, e) => DoCapture(CaptureMode.AllScreens, Source.App))));
             cap.DropDownItems.Add(new ToolStripSeparator());
             cap.DropDownItems.Add(CaseItem(Item("Hash and add &files...", (s, e) => PickFiles(), Keys.Control | Keys.F)));
             cap.DropDownItems.Add(CaseItem(Item("Add &note...", (s, e) => AddNote(), Keys.Control | Keys.T)));
@@ -215,9 +215,9 @@ namespace ChainShot
             bar.Controls.Add(Ui.Label("Delay"));
             bar.Controls.Add(delayBox);
             bar.Controls.Add(Ui.Label("s"));
-            var screen = Btn("Screen", (s, e) => DoCapture(CaptureMode.Screen, false), "Capture the screen under the mouse (Ctrl+Alt+P anywhere)");
-            var window = Btn("Window", (s, e) => DoCapture(CaptureMode.Window, false), "Capture the window you were using before ChainShot (Ctrl+Alt+W captures the active window)");
-            var region = Btn("Region", (s, e) => DoCapture(CaptureMode.Region, false), "Draw a rectangle on a frozen copy of the screen (Ctrl+Alt+R)");
+            var screen = Btn("Screen", (s, e) => DoCapture(CaptureMode.Screen, Source.App), "Capture the screen under the mouse (Ctrl+Alt+P anywhere)");
+            var window = Btn("Window", (s, e) => DoCapture(CaptureMode.Window, Source.App), "Capture the window you were using before ChainShot (Ctrl+Alt+W captures the active window)");
+            var region = Btn("Region", (s, e) => DoCapture(CaptureMode.Region, Source.App), "Draw a rectangle on a frozen copy of the screen (Ctrl+Alt+R)");
             screen.Font = window.Font = region.Font = new Font(Font, FontStyle.Bold);
             screen.Margin = new Padding(14, 3, 3, 3);
             bar.Controls.Add(screen);
@@ -320,9 +320,9 @@ namespace ChainShot
             var m = new ContextMenuStrip();
             m.Items.Add("Open ChainShot", null, (s, e) => ShowFromTray()).Font = new Font(m.Font, FontStyle.Bold);
             m.Items.Add(new ToolStripSeparator());
-            m.Items.Add(new ToolStripMenuItem("Capture screen", null, (s, e) => DoCapture(CaptureMode.Screen, true)) { ShortcutKeyDisplayString = "Ctrl+Alt+P" });
-            m.Items.Add(new ToolStripMenuItem("Capture window", null, (s, e) => DoCapture(CaptureMode.Window, true)) { ShortcutKeyDisplayString = "Ctrl+Alt+W" });
-            m.Items.Add(new ToolStripMenuItem("Capture region", null, (s, e) => DoCapture(CaptureMode.Region, true)) { ShortcutKeyDisplayString = "Ctrl+Alt+R" });
+            m.Items.Add(new ToolStripMenuItem("Capture screen", null, (s, e) => DoCapture(CaptureMode.Screen, Source.Tray)) { ShortcutKeyDisplayString = "Ctrl+Alt+P" });
+            m.Items.Add(new ToolStripMenuItem("Capture last window", null, (s, e) => DoCapture(CaptureMode.Window, Source.Tray)) { ShortcutKeyDisplayString = "Ctrl+Alt+W" });
+            m.Items.Add(new ToolStripMenuItem("Capture region", null, (s, e) => DoCapture(CaptureMode.Region, Source.Tray)) { ShortcutKeyDisplayString = "Ctrl+Alt+R" });
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Set tag...", null, (s, e) =>
             {
@@ -352,8 +352,10 @@ namespace ChainShot
         {
             base.OnHandleCreated(e);
             if (hotkeys != null) return;
+            foregroundTimer.Tick += (sender, args) => TrackForeground();
+            foregroundTimer.Start();
             hotkeys = new HotkeyWindow();
-            hotkeys.Pressed += id => DoCapture(id == HotWindow ? CaptureMode.Window : id == HotRegion ? CaptureMode.Region : CaptureMode.Screen, true);
+            hotkeys.Pressed += id => DoCapture(id == HotWindow ? CaptureMode.Window : id == HotRegion ? CaptureMode.Region : CaptureMode.Screen, Source.Hotkey);
             if (!hotkeys.Register(HotScreen, Keys.P)) HotkeyFailures.Add("Ctrl+Alt+P");
             if (!hotkeys.Register(HotWindow, Keys.W)) HotkeyFailures.Add("Ctrl+Alt+W");
             if (!hotkeys.Register(HotRegion, Keys.R)) HotkeyFailures.Add("Ctrl+Alt+R");
@@ -691,20 +693,39 @@ namespace ChainShot
         }
 
         // ------------------------------------------------------------------ capture
-        async void DoCapture(CaptureMode mode, bool fromHotkey)
+        enum Source { App, Tray, Hotkey }
+
+        // Last window the user worked in, outside ChainShot: target of the Window button and tray item.
+        IntPtr lastExternalWindow;
+        readonly Timer foregroundTimer = new Timer { Interval = 300 };
+        static readonly int OwnPid = Process.GetCurrentProcess().Id;
+
+        void TrackForeground()
+        {
+            IntPtr h = Native.GetForegroundWindow();
+            if (h == IntPtr.Zero || Native.GetProcessId(h) == OwnPid || !Native.IsWindowVisible(h)) return;
+            string cls = Native.GetClassName(h);
+            // Ignore the taskbar, the desktop and the notification area overflow.
+            if (cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd" || cls == "Progman" || cls == "WorkerW" ||
+                cls == "NotifyIconOverflowWindow" || cls == "TopLevelWindowForOverflowXamlIsland") return;
+            lastExternalWindow = h;
+        }
+
+        async void DoCapture(CaptureMode mode, Source source)
         {
             if (busy) return;
             if (current == null)
             {
-                if (fromHotkey && !Visible) Notify("No case open: open ChainShot and create or open a case.", ToolTipIcon.Warning);
+                if (source != Source.App && !Visible) Notify("No case open: open ChainShot and create or open a case.", ToolTipIcon.Warning);
                 else Ui.Error(this, "Create or open a case first.");
                 return;
             }
             string tag = tagBox.Text.Trim();
             string note = noteBox.Text.Trim();
             SaveTag();
-            int delay = fromHotkey ? 0 : (int)delayBox.Value;
-            bool restore = !fromHotkey && Visible && WindowState != FormWindowState.Minimized;
+            int delay = source == Source.Hotkey ? 0 : (int)delayBox.Value;
+            IntPtr remembered = lastExternalWindow;
+            bool restore = source != Source.Hotkey && Visible && WindowState != FormWindowState.Minimized;
             SetBusy(true);
             JsonObject entry = null;
             try
@@ -712,13 +733,16 @@ namespace ChainShot
                 if (restore) Hide(); // never capture ChainShot itself when a button was clicked
                 if (delay > 0 && mode != CaptureMode.Region)
                     Notify(string.Format("{0} capture in {1} s{2}", mode, delay, mode == CaptureMode.Window ? ": click the window to capture" : ""), ToolTipIcon.Info);
-                await Task.Delay(fromHotkey ? 150 : Math.Max(400, delay * 1000));
+                await Task.Delay(source == Source.Hotkey ? 150 : Math.Max(400, delay * 1000));
                 IntPtr target = IntPtr.Zero;
                 if (mode == CaptureMode.Window)
                 {
-                    target = Native.GetForegroundWindow();
-                    if (target == Handle || target == IntPtr.Zero || !Native.IsWindowVisible(target))
-                        throw new InvalidOperationException("No other window is active. Set a delay and click the window to capture, or use Ctrl+Alt+W.");
+                    // Hotkey, or a delay during which the user clicked the target: the active window.
+                    // Otherwise the window used just before ChainShot (or its tray menu) was clicked.
+                    if (source == Source.Hotkey || delay > 0) target = Native.GetForegroundWindow();
+                    else target = remembered != IntPtr.Zero && Native.IsWindowVisible(remembered) ? remembered : Native.GetForegroundWindow();
+                    if (target == IntPtr.Zero || Native.GetProcessId(target) == OwnPid || !Native.IsWindowVisible(target))
+                        throw new InvalidOperationException("No other window to capture. Set a delay and click the window to capture, or use Ctrl+Alt+W.");
                 }
                 entry = ScreenCapture.Capture(current, mode, tag, note, null, target);
             }
@@ -1017,7 +1041,7 @@ namespace ChainShot
             Activate();
             grid.ClearSelection();
             await Task.Delay(500);
-            Rectangle b = Bounds;
+            Rectangle b = Native.GetWindowBounds(Handle); // visible frame, without the shadow
             using (var bmp = new Bitmap(b.Width, b.Height))
             {
                 bool grabbed = false;
