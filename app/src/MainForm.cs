@@ -44,7 +44,7 @@ namespace ChainShot
         readonly TextBox filterBox = new TextBox { Width = 260 };
         readonly Label filterInfo = new Label { AutoSize = true, ForeColor = Ui.Muted, Margin = new Padding(8, 7, 3, 3) };
         readonly PictureBox previewImage = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(0xF3, 0xF2, 0xEE) };
-        readonly Label previewText = new Label { Dock = DockStyle.Bottom, Height = 150, Padding = new Padding(8, 6, 8, 6), Font = new Font("Segoe UI", 8.5f) };
+        readonly Label previewText = new Label { Dock = DockStyle.Bottom, Height = 200, Padding = new Padding(8, 6, 8, 6), Font = new Font("Segoe UI", 8.5f) };
         readonly Label previewTitle = new Label { Dock = DockStyle.Top, Height = 26, Padding = new Padding(8, 6, 8, 0), Font = new Font("Segoe UI Semibold", 9f), Text = "Preview" };
         readonly Panel emptyPanel = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
         readonly FlowLayoutPanel recentPanel = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
@@ -297,7 +297,7 @@ namespace ChainShot
             previewImage.DoubleClick += (s, e) => OpenEntry(SelectedEntry());
             tips.SetToolTip(previewImage, "Double-click to open the file");
             split.Panel2Collapsed = !settings.ShowPreview;
-            split.HandleCreated += (s, e) => { try { split.SplitterDistance = Math.Max(300, split.Width - 330); } catch (InvalidOperationException) { } };
+            split.HandleCreated += (s, e) => { try { split.SplitterDistance = Math.Max(300, Math.Max(split.Width, ClientSize.Width) - 284); } catch (InvalidOperationException) { } };
             grid.SelectionChanged += (s, e) => UpdatePreview(SelectedEntry());
             return split;
         }
@@ -340,10 +340,10 @@ namespace ChainShot
                     using (var ms = new MemoryStream(bytes))
                     using (var img = Image.FromStream(ms)) previewImage.Image = new Bitmap(img);
                 }
-                catch (Exception) { /* missing or not an image: details only */ }
+                catch (Exception) { previewTitle.Text += "  -  image unreadable (missing or modified?)"; }
             }
-            var lines = new List<string> { "UTC  " + e.Str("utc").Replace("T", " ") + "   (" + e.Str("local") + ")" };
-            if (file.Length > 0) lines.Add("File  " + file + (e.Str("size").Length > 0 ? "  (" + e.Str("size") + " bytes)" : ""));
+            var lines = new List<string> { "UTC  " + e.Str("utc").Replace("T", " "), "Local  " + e.Str("local").Replace("T", " ") };
+            if (file.Length > 0) lines.Add("File  " + file + (e.Str("size").Length > 0 ? " (" + e.Str("size") + " bytes)" : ""));
             if (e.Str("sha256").Length > 0) lines.Add("SHA-256  " + e.Str("sha256"));
             if (e.Str("title").Length > 0) lines.Add("Title  " + e.Str("title"));
             if (e.Str("url").Length > 0) lines.Add("URL  " + e.Str("url"));
@@ -366,13 +366,19 @@ namespace ChainShot
             grid.AllowDrop = true;
             grid.DragEnter += (s, e) => GridDragEnter(e);
             grid.DragDrop += (s, e) => GridDragDrop(e);
-            AddCol("seq", "#", 46, DataGridViewContentAlignment.MiddleRight);
-            AddCol("utc", "UTC", 170);
-            AddCol("tag", "Tag", 70);
-            AddCol("type", "Type", 80);
-            AddCol("evidence", "Evidence", 330).AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            AddCol("sha", "SHA-256", 150).DefaultCellStyle.Font = new Font("Consolas", 8.5f);
-            AddCol("status", "Status", 200);
+            AddCol("seq", "#", 40, DataGridViewContentAlignment.MiddleRight);
+            AddCol("utc", "UTC", 152);
+            AddCol("tag", "Tag", 58);
+            AddCol("type", "Type", 76);
+            var ev = AddCol("evidence", "Evidence", 300);
+            ev.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            ev.FillWeight = 300;
+            ev.MinimumWidth = 120;
+            AddCol("sha", "SHA-256", 112).DefaultCellStyle.Font = new Font("Consolas", 8.5f);
+            var st = AddCol("status", "Status", 110);
+            st.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            st.FillWeight = 110;
+            st.MinimumWidth = 70;
             grid.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0) OpenEntry(EntryAt(e.RowIndex)); };
             grid.CellFormatting += FormatCell;
 
@@ -776,7 +782,7 @@ namespace ChainShot
                 if (extra.Length > 0) evidence = evidence.Length > 0 ? evidence + "  -  " + extra : extra;
                 string sha = e.Str("sha256");
                 int i = grid.Rows.Add(e.Str("seq"), e.Str("utc").Replace("T", " "), e.Str("tag"), e.Str("type"), evidence,
-                                      sha.Length > 16 ? sha.Substring(0, 16) + "..." : sha, c.Ok ? "chain OK" : string.Join(" / ", c.Problems));
+                                      sha.Length > 12 ? sha.Substring(0, 12) + "..." : sha, c.Ok ? "chain OK" : string.Join(" / ", c.Problems));
                 var row = grid.Rows[i];
                 row.Tag = e;
                 row.Cells["sha"].ToolTipText = sha;

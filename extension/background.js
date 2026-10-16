@@ -231,7 +231,7 @@ async function captureTab({ note } = {}) {
       const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
       if (!tab) throw new Error('No active tab.');
       const now = new Date();
-      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+      const dataUrl = await captureVisible(tab.windowId);
       const entry = await captureToApp(state, tab, dataUrl, now, (note ?? state.settings.nextNote) || '');
       if (state.settings.nextNote) { state.settings.nextNote = ''; await saveState(state); }
       flashBadge('OK', '#1f7a4d');
@@ -241,7 +241,7 @@ async function captureTab({ note } = {}) {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     if (!tab) throw new Error('No active tab.');
     const now = new Date();
-    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+    const dataUrl = await captureVisible(tab.windowId);
     const tag = state.settings.tag || '';
     const text = (note ?? state.settings.nextNote) || '';
     const seq = c.entries.length + 1; // journal entry number (entry 1 is the case creation note)
@@ -260,6 +260,18 @@ async function captureTab({ note } = {}) {
     flashBadge('OK', '#1f7a4d');
     return entry;
   }).catch((err) => { flashBadge('ERR', '#b3261e'); throw err; });
+}
+
+/** Chrome allows two captures per second: wait and retry instead of failing. */
+async function captureVisible(windowId) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+    } catch (err) {
+      if (attempt >= 4 || !/MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND/.test(String(err?.message || err))) throw err;
+      await new Promise((r) => setTimeout(r, 600));
+    }
+  }
 }
 
 function flashBadge(text, color) {

@@ -22,6 +22,7 @@ function renderDestination(dest) {
   for (const b of [$('destDownloads'), $('destApp')]) b.setAttribute('aria-pressed', String(b.dataset.dest === dest));
   for (const el of document.querySelectorAll('.browser-only')) el.hidden = dest === 'app';
   $('caseSelectLabel').hidden = dest === 'app';
+  document.body.classList.toggle('app-mode', dest === 'app');
 }
 
 function renderApp(st) {
