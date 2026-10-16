@@ -14,7 +14,7 @@
 
 Set-StrictMode -Version 2.0
 
-$script:Version       = '1.0.0'
+$script:Version       = '1.1.0'
 $script:ToolId        = "chainshot-ps/$($script:Version)"
 $script:FormatVersion = '1'
 $script:JournalName   = 'journal.jsonl'
@@ -26,6 +26,8 @@ $script:EntryTypes    = @('screenshot', 'browser', 'file', 'note', 'seal', 'time
 $script:Utf8NoBom     = New-Object System.Text.UTF8Encoding($false)
 $script:Invariant     = [System.Globalization.CultureInfo]::InvariantCulture
 $script:IsWin         = ($PSVersionTable.PSVersion.Major -lt 6) -or $IsWindows
+# ChainShot.exe owns 'ChainShot.lnk'; the PowerShell tray gets its own Start menu entry.
+$script:ShortcutName  = 'ChainShot Tray (PowerShell).lnk'
 
 # --------------------------------------------------------------------------
 # Hashing primitives (must match python/chainshot.py byte for byte)
@@ -1022,13 +1024,13 @@ function Install-ChainShotShortcut {
     $targets = @([Environment]::GetFolderPath('Programs'))
     if ($Startup) { $targets += [Environment]::GetFolderPath('Startup') }
     foreach ($dir in $targets) {
-        $lnk = $ws.CreateShortcut((Join-Path $dir 'ChainShot.lnk'))
+        $lnk = $ws.CreateShortcut((Join-Path $dir $script:ShortcutName))
         $lnk.TargetPath = $exe; $lnk.Arguments = $arguments; $lnk.WindowStyle = 7
         $ico = Join-Path $PSScriptRoot 'chainshot.ico'
         if (Test-Path -LiteralPath $ico) { $lnk.IconLocation = "$ico,0" }
         $lnk.Description = 'ChainShot - timestamped, hash-chained forensic screenshots'
         $lnk.Save()
-        Write-Host "Shortcut created: $(Join-Path $dir 'ChainShot.lnk')"
+        Write-Host "Shortcut created: $(Join-Path $dir $script:ShortcutName)"
     }
 }
 

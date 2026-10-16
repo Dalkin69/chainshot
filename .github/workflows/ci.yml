@@ -45,6 +45,9 @@ jobs:
         run: |
           python tests/vectors/make_vectors.py
           git diff --exit-code tests/vectors/
+      - name: Every component has the same version number
+        if: runner.os == 'Linux'
+        run: python tests/check_versions.py
 
   powershell:
     name: PowerShell ${{ matrix.shell }} (${{ matrix.os }})
@@ -103,6 +106,49 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.shell }}-test-cases
+          path: test-output
+          if-no-files-found: ignore
+          retention-days: 7
+
+  app:
+    name: Windows app (ChainShot.exe)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v4   # also reports compiler errors as annotations
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build (.NET Framework 4.8, C# 7.3, warnings are errors)
+        run: dotnet build app/ChainShot.csproj -c Release -nologo
+      - name: End-to-end tests (captures, interop with chainshot.py and the module, RFC 3161, window)
+        run: |
+          python -m pip install --quiet pillow
+          python tests/app_e2e.py app/bin/Release/ChainShot.exe --out test-output
+      - name: Previews (annotations)
+        if: always()
+        run: |
+          if (Test-Path test-output/app-window.png) { python tests/ci_annotate.py thumbnail test-output/app-window.png 'App window' full }
+          $png = Get-ChildItem -Recurse -Filter *.png test-output/case-app/captures -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($png) { python tests/ci_annotate.py thumbnail $png.FullName 'App capture banner' }
+      - name: Upload ChainShot.exe (try it before the release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: chainshot-app-exe
+          path: |
+            app/bin/Release/ChainShot.exe
+            app/bin/Release/ChainShot.exe.config
+          retention-days: 14
+      - name: Upload test cases
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-test-cases
           path: test-output
           if-no-files-found: ignore
           retention-days: 7

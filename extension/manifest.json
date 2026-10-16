@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ChainShot - forensic web captures",
   "short_name": "ChainShot",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Timestamped, hash-chained screenshots of web pages (URL, title, UTC time, SHA-256) for forensic and investigation reports.",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "downloads", "storage"],

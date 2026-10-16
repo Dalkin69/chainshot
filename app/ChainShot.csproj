@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ChainShot.exe: Windows application + command line, a single file with no dependency.
+    .NET Framework 4.8 ships with Windows 10 (1903+) and Windows 11, so nothing to install.
+    Build:  dotnet build app/ChainShot.csproj -c Release
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>ChainShot</AssemblyName>
+    <RootNamespace>ChainShot</RootNamespace>
+    <ApplicationIcon>..\windows\ChainShot\chainshot.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>1.1.0</Version>
+    <Product>ChainShot</Product>
+    <Company>ChainShot contributors</Company>
+    <Copyright>Copyright (c) 2026 Dalkin69 - MIT License</Copyright>
+    <Description>ChainShot - timestamped, hash-chained forensic screenshots</Description>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <DebugType>embedded</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Lets `dotnet build` work without the .NET Framework developer pack. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
