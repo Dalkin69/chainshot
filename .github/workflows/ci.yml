@@ -116,4 +116,11 @@ jobs:
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: End-to-end tests (capture, files on disk, verification by chainshot.py)
-        run: npm run test:extension
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:extension 2>&1 | tee extension-tests.log
+      - name: Report failures as annotations
+        if: failure()
+        shell: bash
+        run: python tests/ci_annotate.py failures extension-tests.log
