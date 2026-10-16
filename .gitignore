@@ -1,0 +1,8 @@
+node_modules/
+__pycache__/
+*.pyc
+test-output/
+dist/
+.journal.lock
+.DS_Store
+Thumbs.db

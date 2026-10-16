@@ -1,0 +1,98 @@
+# Continuous integration: every component is tested on every push and pull request.
+# The Windows jobs exercise real screen capture and the tray application.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ['3.9', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Unit tests (includes a real RFC 3161 TSA built with OpenSSL)
+        run: python -m unittest discover -s python/tests -v
+      - name: Vectors are up to date
+        if: runner.os == 'Linux'
+        run: |
+          python tests/vectors/make_vectors.py
+          git diff --exit-code tests/vectors/
+
+  powershell:
+    name: PowerShell ${{ matrix.shell }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, shell: powershell }   # Windows PowerShell 5.1
+          - { os: windows-latest, shell: pwsh }         # PowerShell 7
+          - { os: ubuntu-latest,  shell: pwsh }         # journal features on Linux
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    env:
+      CHAINSHOT_TEST_OUT: ${{ github.workspace }}/test-output
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Pester 5
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:CHAINSHOT_TEST_OUT | Out-Null
+          Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+      - name: Static analysis (errors only)
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $issues = Invoke-ScriptAnalyzer -Path windows -Recurse -Severity Error
+          $issues | Format-Table -AutoSize
+          if ($issues) { throw "PSScriptAnalyzer found $($issues.Count) error(s)" }
+      - name: Pester tests
+        run: |
+          Import-Module Pester -MinimumVersion 5.5.0
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = 'windows/tests'
+          $cfg.Run.Exit = $true
+          $cfg.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $cfg
+      - name: Upload test cases (screenshots taken on the runner)
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.shell }}-test-cases
+          path: test-output
+          if-no-files-found: ignore
+          retention-days: 7
+
+  extension:
+    name: Browser extension (Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: End-to-end tests (capture, files on disk, verification by chainshot.py)
+        run: npm run test:extension
