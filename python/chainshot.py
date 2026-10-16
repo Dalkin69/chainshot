@@ -641,7 +641,7 @@ main{max-width:1200px;margin:0 auto;padding:32px 16px}h1{font-size:28px;margin:0
 dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:0}dt{color:var(--muted)}dd{margin:0}
 table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line)}th,td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
 th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}code{font:12px ui-monospace,Consolas,monospace;word-break:break-all}
-img.thumb{max-width:220px;max-height:140px;border:1px solid var(--line);border-radius:4px;display:block}
+td.nowrap code{white-space:nowrap}img.thumb{max-width:220px;max-height:140px;border:1px solid var(--line);border-radius:4px;display:block}
 .st-ok{color:var(--ok);font-weight:600}.st-bad{color:var(--bad);font-weight:600}.wrap{overflow-x:auto}
 footer{margin-top:40px;font-size:13px;color:var(--muted)}
 """
@@ -670,7 +670,7 @@ def render_report(case: Case, res: Result, out_path: Path) -> str:
         status = '<span class="st-ok">OK</span>' if r["ok"] else '<span class="st-bad">' + esc(" / ".join(r["problems"])) + "</span>"
         ctx = " ".join(x for x in (e.get("url", ""), e.get("title", "")) if x)
         rows.append(
-            f"<tr><td>{esc(str(r['seq']))}</td><td><code>{esc(e.get('utc', ''))}</code></td><td>{esc(e.get('tag', ''))}</td>"
+            f"<tr><td>{esc(str(r['seq']))}</td><td class='nowrap'><code>{esc(e.get('utc', ''))}</code></td><td>{esc(e.get('tag', ''))}</td>"
             f"<td>{esc(e.get('type', ''))}</td><td>{thumb}<code>{esc(f)}</code><div class='muted'>{esc(ctx)}</div>"
             f"<div>{esc(e.get('note', ''))}</div></td><td><code>{esc(e.get('sha256', ''))}</code></td><td>{status}</td></tr>"
         )
