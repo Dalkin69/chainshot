@@ -45,4 +45,4 @@ Install-ChainShotShortcut -Startup:$Startup
 Write-Host ''
 Write-Host 'Next steps:' -ForegroundColor Green
 Write-Host '  New-ChainShotCase -Path D:\Cases\MyCase -Case "My case" -Examiner "Your name"'
-Write-Host '  Start the tray from the Start menu (ChainShot), then Ctrl+Alt+P / W / R.'
+Write-Host '  Start the tray from the Start menu (ChainShot Tray (PowerShell)), then Ctrl+Alt+P / W / R.'

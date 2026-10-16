@@ -29,12 +29,16 @@ analyse Autopsy, puis il est devenu une boîte à outils.
 
 | Composant | Plateforme | Rôle |
 | --- | --- | --- |
-| [**Module Windows et application de la zone de notification**](windows/) | Windows 10/11, PowerShell 5.1 ou 7 | Captures écran, fenêtre et zone avec raccourcis globaux, tags, notes, hachage de fichiers, vérification, scellés |
+| [**Application ChainShot**](app/) (`ChainShot.exe`) | Windows 10/11, un seul fichier, rien à installer | L'outil Windows principal : création de cas, captures écran, fenêtre et zone avec raccourcis globaux, tags, notes, hachage de fichiers par glisser-déposer, vérification, scellés RFC 3161, rapport HTML, icône de notification ; ligne de commande incluse |
+| [**Module PowerShell**](windows/) | Windows PowerShell 5.1 ou 7 | Les mêmes fonctions depuis PowerShell, pour les scripts et les adeptes de la ligne de commande, avec sa propre icône de notification |
 | [**Extension navigateur**](extension/) | Chrome, Edge, Brave (Chromium 116+) | Capture l'onglet visible avec son URL et son titre, écrit un cas ChainShot dans le dossier Téléchargements |
 | [**`chainshot.py`**](python/) | Tout OS, Python 3.9+, sans dépendance | Implémentation de référence : vérification, scellés RFC 3161, rapport HTML, export CSV, ajout de fichiers et de notes |
 
-Les trois écrivent **le même format de journal** ([spécification, en anglais](docs/journal-format.md)) et sont
-testés sur les mêmes vecteurs : un cas commencé sous Windows peut être complété avec l'extension et vérifié partout.
+Les quatre écrivent **le même format de journal** ([spécification, en anglais](docs/journal-format.md)) et sont
+testés sur les mêmes vecteurs : un cas commencé dans l'application peut être poursuivi en PowerShell ou avec
+l'extension, et vérifié partout.
+
+<img src="docs/img/app-window.png" alt="ChainShot pour Windows : en-tête du cas avec le badge de vérification, champs tag et note, boutons de capture et journal du cas" width="820">
 
 | Capture web avec bandeau | Fenêtre de l'extension |
 | --- | --- |
@@ -58,16 +62,15 @@ testés sur les mêmes vecteurs : un cas commencé sous Windows peut être compl
 
 ## Démarrage rapide
 
-### Windows : module et application de la zone de notification
+### Windows : l'application ChainShot
 
-Téléchargez la dernière [release](https://github.com/Dalkin69/chainshot/releases) (`chainshot-windows-*.zip`), décompressez-la, puis :
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Install-ChainShot.ps1          # -Startup pour la lancer à l'ouverture de session
-New-ChainShotCase -Path D:\Cas\DEMO-01 -Case 'DEMO-01 Poste PC-042' -Examiner 'Votre nom'
-```
-
-Lancez **ChainShot** depuis le menu Démarrer. Une icône apparaît dans la zone de notification :
+1. Téléchargez `chainshot-app-*.zip` depuis la dernière [release](https://github.com/Dalkin69/chainshot/releases),
+   décompressez-le et lancez `ChainShot.exe` (rien à installer, pas de droits administrateur). L'exécutable n'est pas
+   signé : si SmartScreen affiche un avertissement, cliquez sur **Informations complémentaires > Exécuter quand même**
+   ([pourquoi](app/README.md#install)). Le menu **Options** ajoute ChainShot au menu Démarrer et au démarrage de Windows.
+2. **New case...** : nom ou référence du cas et nom de l'examinateur. L'interface est en anglais.
+3. Saisissez un **tag** (par exemple `P17`), puis capturez avec les boutons ou les raccourcis, depuis n'importe
+   quelle application :
 
 | Raccourci | Capture |
 | --- | --- |
@@ -75,11 +78,20 @@ Lancez **ChainShot** depuis le menu Démarrer. Une icône apparaît dans la zone
 | `Ctrl+Alt+W` | fenêtre au premier plan (son titre et son processus sont enregistrés) |
 | `Ctrl+Alt+R` | zone : l'écran se fige, tracez un rectangle, `Échap` annule |
 
-Le menu de l'icône permet de définir le **tag** (par exemple `P17`), d'ajouter une **note** au journal, de
-**hacher un fichier** (export Autopsy, image disque), de **vérifier** le cas, de le **sceller**, d'ouvrir le
-**rapport HTML** et de changer de cas. Tout est aussi disponible en PowerShell :
+4. Glissez des fichiers sur la fenêtre pour les hacher (export Autopsy, image disque), ajoutez des **notes**, puis
+   **Verify**, **Seal + timestamp** et ouvrez le **HTML report**.
+
+Fermer la fenêtre laisse ChainShot dans la zone de notification avec ses raccourcis. Le [guide de l'application](app/README.md)
+(en anglais) détaille les options et la ligne de commande (`ChainShot.exe verify`, `capture`, `seal --tsa`...).
+
+### Windows : module PowerShell
+
+Pour PowerShell et les scripts : le module fait tout ce que fait l'application, et les deux partagent le cas et le
+tag courants, on peut donc les combiner. Téléchargez `chainshot-powershell-*.zip`, décompressez-le, puis :
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File .\Install-ChainShot.ps1          # -Startup pour lancer son icône à l'ouverture de session
+New-ChainShotCase -Path D:\Cas\DEMO-01 -Case 'DEMO-01 Poste PC-042' -Examiner 'Votre nom'
 Set-ChainShotTag P17
 Invoke-ChainShot -Mode Window -Delay 3 -Note 'Autopsy - Installed Programs'
 Add-ChainShotFile -Path D:\Export\capture.pcap -Note 'Capture réseau exportée depuis Autopsy'
@@ -87,6 +99,7 @@ Add-ChainShotNote 'Début de la recherche par mots-clés sur le profil utilisate
 Test-ChainShotCase
 New-ChainShotSeal
 Export-ChainShotReport -Open        # nécessite Python 3.9+
+Start-ChainShotTray                 # icône de notification avec les mêmes raccourcis (pas en même temps que l'application)
 ```
 
 ### Extension navigateur (Chrome, Edge, Brave)
@@ -157,7 +170,7 @@ numéro `#` est celui de l'entrée du journal, à citer dans un rapport.
 N'ouvrez **pas** `journal.jsonl` dans Excel pour l'enregistrer : cela réécrit le fichier. Utilisez
 `chainshot.py export-csv` pour une vue tableur.
 
-La référence complète des commandes PowerShell et Python est dans le [README anglais](README.md#reference).
+La référence complète des commandes de `ChainShot.exe`, de PowerShell et de Python est dans le [README anglais](README.md#reference).
 
 ## Ce que ChainShot prouve, et ce qu'il ne prouve pas
 
@@ -183,10 +196,11 @@ Chaque envoi déclenche l'ensemble des tests sur GitHub Actions ([workflow](.git
 
 | Suite | Environnements | Couvre |
 | --- | --- | --- |
+| Application, bout en bout | Windows (vrai bureau) | `ChainShot.exe` compilé depuis les sources : vecteurs, **vraies captures avec bandeau**, cas vérifiés par `chainshot.py` et le module dans les deux sens, réglages partagés, altérations, **RFC 3161** avec une autorité OpenSSL, rapport HTML, la fenêtre elle-même |
 | Python `unittest` | Linux, Windows, macOS ; Python 3.9 et 3.13 | journal, scénarios d'altération, scellés, format v0, rapport, **RFC 3161 avec une vraie autorité d'horodatage OpenSSL** |
 | Pester | Windows PowerShell 5.1, PowerShell 7 sous Windows et Linux | journal, altérations, scellés, **vraies captures écran, fenêtre et rectangle**, **application de notification et raccourcis**, interopérabilité avec Python dans les deux sens |
 | Playwright | Chromium | extension chargée dans un vrai navigateur : capture, fichiers écrits par l'API de téléchargement, vérification par `chainshot.py`, détection d'altération, fenêtre |
-| Vecteurs partagés | les trois | `tests/vectors/canonical-vectors.json` : texte canonique, hash d'entrée et chaîne identiques |
+| Vecteurs partagés | les quatre | `tests/vectors/canonical-vectors.json` : texte canonique, hash d'entrée et chaîne identiques |
 
 ## Réalisé avec l'IA
 

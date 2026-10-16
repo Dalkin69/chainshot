@@ -18,20 +18,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Get ChainShot.exe built and tested by the CI run above
+        uses: actions/download-artifact@v4
+        with:
+          name: chainshot-app-exe
+          path: dist/app
       - name: Build packages
         run: |
           set -euo pipefail
           v="${GITHUB_REF_NAME}"
-          mkdir -p dist/win/ChainShot dist/ext
-          cp -r windows/ChainShot/* dist/win/ChainShot/
-          cp python/chainshot.py dist/win/ChainShot/
-          cp windows/Install-ChainShot.ps1 windows/README.md LICENSE dist/win/
-          (cd dist/win && zip -qr "../chainshot-windows-${v}.zip" .)
+          test "v$(python3 tests/check_versions.py --print)" = "$v" || { echo "::error::tag $v does not match the version in the sources"; exit 1; }
+          cp LICENSE app/README.md dist/app/
+          (cd dist/app && zip -qr "../chainshot-app-${v}.zip" .)
+          mkdir -p dist/ps/ChainShot dist/ext
+          cp -r windows/ChainShot/* dist/ps/ChainShot/
+          cp python/chainshot.py dist/ps/ChainShot/
+          cp windows/Install-ChainShot.ps1 windows/README.md LICENSE dist/ps/
+          (cd dist/ps && zip -qr "../chainshot-powershell-${v}.zip" .)
           cp -r extension/* dist/ext/
           cp LICENSE dist/ext/
           (cd dist/ext && zip -qr "../chainshot-extension-${v}.zip" .)
           cp python/chainshot.py dist/chainshot.py
-          (cd dist && sha256sum chainshot-windows-${v}.zip chainshot-extension-${v}.zip chainshot.py > SHA256SUMS.txt)
+          (cd dist && sha256sum chainshot-app-${v}.zip chainshot-powershell-${v}.zip chainshot-extension-${v}.zip chainshot.py > SHA256SUMS.txt)
           cat dist/SHA256SUMS.txt
       - name: Release notes from CHANGELOG (if the release has no description)
         env:
@@ -49,4 +57,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$GITHUB_REF_NAME" --clobber \
-            dist/chainshot-windows-*.zip dist/chainshot-extension-*.zip dist/chainshot.py dist/SHA256SUMS.txt
+            dist/chainshot-app-*.zip dist/chainshot-powershell-*.zip dist/chainshot-extension-*.zip \
+            dist/chainshot.py dist/SHA256SUMS.txt

@@ -170,7 +170,7 @@ Describe 'ChainShot' {
         It 'creates a Start menu shortcut that uses the ChainShot icon' {
             if (-not $script:IsWin) { Set-ItResult -Skipped -Because 'Windows only'; return }
             Install-ChainShotShortcut | Out-Null
-            $path = Join-Path ([Environment]::GetFolderPath('Programs')) 'ChainShot.lnk'
+            $path = Join-Path ([Environment]::GetFolderPath('Programs')) 'ChainShot Tray (PowerShell).lnk'
             try {
                 $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($path)
                 $lnk.IconLocation | Should -Match 'chainshot\.ico,0$'
