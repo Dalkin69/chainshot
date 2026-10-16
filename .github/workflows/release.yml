@@ -1,9 +1,10 @@
-# Builds the release packages when a version tag (v1.2.3) is pushed, after running the tests.
+# When a release is published on GitHub (tag v1.2.3), runs the tests, builds the
+# packages and attaches them to the release, with SHA256SUMS.txt.
 name: Release
 
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -32,16 +33,20 @@ jobs:
           cp python/chainshot.py dist/chainshot.py
           (cd dist && sha256sum chainshot-windows-${v}.zip chainshot-extension-${v}.zip chainshot.py > SHA256SUMS.txt)
           cat dist/SHA256SUMS.txt
-      - name: Release notes from CHANGELOG
+      - name: Release notes from CHANGELOG (if the release has no description)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           awk -v ver="${GITHUB_REF_NAME#v}" '
             $0 ~ "^## \\[" ver "\\]" {on=1; next}
             on && /^## \[/ {exit}
             on {print}' CHANGELOG.md > notes.md
           printf '\n---\nVerify downloads with `sha256sum -c SHA256SUMS.txt`.\n' >> notes.md
-      - name: Publish GitHub release
+          body="$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)"
+          if [ -z "$body" ]; then gh release edit "$GITHUB_REF_NAME" --notes-file notes.md; fi
+      - name: Attach packages to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --title "ChainShot $GITHUB_REF_NAME" --notes-file notes.md \
+          gh release upload "$GITHUB_REF_NAME" --clobber \
             dist/chainshot-windows-*.zip dist/chainshot-extension-*.zip dist/chainshot.py dist/SHA256SUMS.txt
