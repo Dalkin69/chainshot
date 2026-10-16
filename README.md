@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/Dalkin69/chainshot/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Dalkin69/chainshot/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-2b4c7e">
   <img alt="Windows PowerShell 5.1 and 7" src="https://img.shields.io/badge/PowerShell-5.1%20%7C%207-2b4c7e">
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-2b4c7e">
   <img alt="Chrome / Edge" src="https://img.shields.io/badge/browser-Chrome%20%7C%20Edge%20%7C%20Brave-2b4c7e">
@@ -51,13 +52,16 @@ an Autopsy analysis, and grew into a toolkit.
 
 | Component | Platform | What it does |
 | --- | --- | --- |
-| [**Windows module and tray app**](windows/) | Windows 10/11, PowerShell 5.1 or 7 | Screen, window and region captures with global hotkeys, tags, notes, file hashing, verification, seals |
+| [**ChainShot app**](app/) (`ChainShot.exe`) | Windows 10/11, single file, nothing to install | The main Windows tool: create cases, screen/window/region captures with global hotkeys, tags, notes, drag-and-drop file hashing, verification, seals with RFC 3161, HTML report, tray icon; command line included |
+| [**PowerShell module**](windows/) | Windows PowerShell 5.1 or 7 | The same features from PowerShell, for scripts and command-line users, with its own tray app |
 | [**Browser extension**](extension/) | Chrome, Edge, Brave (Chromium 116+) | Captures the visible tab with its URL and title, writes a ChainShot case into your Downloads folder |
 | [**`chainshot.py`**](python/) | Any OS, Python 3.9+, no dependency | Reference implementation: verify, seal with RFC 3161, HTML report, CSV export, add files and notes |
 
-All three write the **same journal format** ([specification](docs/journal-format.md)) and are tested
-against the same vectors, so a case started on Windows can be completed with the extension and
-verified anywhere.
+All four write the **same journal format** ([specification](docs/journal-format.md)) and are tested
+against the same vectors, so a case started in the app can be continued from PowerShell or the extension
+and verified anywhere.
+
+<img src="docs/img/app-window.png" alt="ChainShot for Windows: case header with the verification badge, tag and note fields, capture buttons and the journal of the case" width="820">
 
 | Web capture with banner | Extension popup |
 | --- | --- |
@@ -92,16 +96,13 @@ flowchart LR
 
 ## Quick start
 
-### Windows: module and tray application
+### Windows: the ChainShot app
 
-Download the latest [release](https://github.com/Dalkin69/chainshot/releases) (`chainshot-windows-*.zip`), extract it, then:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Install-ChainShot.ps1          # add -Startup to launch the tray at logon
-New-ChainShotCase -Path D:\Cases\DEMO-01 -Case 'DEMO-01 Workstation PC-042' -Examiner 'Your name'
-```
-
-Start **ChainShot** from the Start menu. A tray icon appears:
+1. Download `chainshot-app-*.zip` from the latest [release](https://github.com/Dalkin69/chainshot/releases), extract it and
+   start `ChainShot.exe` (nothing to install, no admin rights). The executable is not code-signed: if SmartScreen
+   warns you, click **More info > Run anyway** ([why](app/README.md#install)).
+2. **New case...**: give the case a name or reference and the examiner name.
+3. Type a **tag** (for example `P17`), then capture with the buttons or the hotkeys, from any application:
 
 | Hotkey | Capture |
 | --- | --- |
@@ -109,11 +110,20 @@ Start **ChainShot** from the Start menu. A tray icon appears:
 | `Ctrl+Alt+W` | foreground window (its title and process are recorded) |
 | `Ctrl+Alt+R` | region: the screen freezes, draw a rectangle, `Esc` cancels |
 
-The tray menu sets the **tag** (for example `P17`), adds a **note** to the journal, **hashes a file**
-(an export from Autopsy, a disk image), **verifies** the case, **seals** it, opens the **HTML report**
-and switches cases. Everything is also available from PowerShell:
+4. Drop files on the window to hash them (an export from Autopsy, a disk image), add **notes**, then **Verify**,
+   **Seal + timestamp** and open the **HTML report**.
+
+Closing the window keeps ChainShot in the notification area with its hotkeys. The [app guide](app/README.md)
+covers the options and the command line (`ChainShot.exe verify`, `capture`, `seal --tsa`...).
+
+### Windows: PowerShell module
+
+For PowerShell users and scripts: the module does everything the app does, and both share the current
+case and tag, so you can mix them. Download `chainshot-powershell-*.zip`, extract it, then:
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File .\Install-ChainShot.ps1          # add -Startup to launch its tray at logon
+New-ChainShotCase -Path D:\Cases\DEMO-01 -Case 'DEMO-01 Workstation PC-042' -Examiner 'Your name'
 Set-ChainShotTag P17
 Invoke-ChainShot -Mode Window -Delay 3 -Note 'Autopsy - Installed Programs'
 Add-ChainShotFile -Path D:\Export\capture.pcap -Note 'Network capture exported from Autopsy'
@@ -121,6 +131,7 @@ Add-ChainShotNote 'Started keyword search on the user profile'
 Test-ChainShotCase
 New-ChainShotSeal
 Export-ChainShotReport -Open        # needs Python 3.9+
+Start-ChainShotTray                 # tray icon with the same hotkeys (do not run it together with the app)
 ```
 
 ### Browser extension (Chrome, Edge, Brave)
@@ -191,6 +202,26 @@ Do **not** open `journal.jsonl` in Excel and save it: that rewrites the file. Us
 ## Reference
 
 <details>
+<summary><b><code>ChainShot.exe</code> commands</b></summary>
+
+| Command | Purpose |
+| --- | --- |
+| `ChainShot.exe [--minimized]` | open the application (in the tray with `--minimized`) |
+| `new-case <folder> --case NAME [--examiner NAME]` | create a case and select it |
+| `tag [TAG]` | show or set the tag of the next entries |
+| `capture [--mode screen\|all\|window\|region] [--rect x,y,w,h] [--delay s] [--tag] [--note]` | capture |
+| `add <file>... [--copy] [--tag] [--note]` | hash files into the journal |
+| `note TEXT [--tag]` | text-only entry |
+| `verify [<case>] [--json]` | verify; exit code 0 = intact, 1 = problem, 2 = error |
+| `seal [<case>] [--tsa [URL]]` | seal, optionally with an RFC 3161 timestamp |
+| `report [<case>] [--out FILE] [--open]` | HTML report |
+| `selftest <vectors.json>` | check the implementation against the shared vectors |
+
+Commands use the current case unless `--case <folder>` is given. From PowerShell, add `| Out-Host` so the prompt
+waits for the result.
+</details>
+
+<details>
 <summary><b>PowerShell commands</b></summary>
 
 | Command | Purpose |
@@ -207,7 +238,7 @@ Do **not** open `journal.jsonl` in Excel and save it: that rewrites the file. Us
 | `New-ChainShotSeal` | seal the journal |
 | `Export-ChainShotReport [-Open]` | HTML report (calls `chainshot.py`) |
 | `Start-ChainShotTray` | tray application and hotkeys |
-| `Install-ChainShotShortcut [-Startup]` | Start menu / Startup shortcuts |
+| `Install-ChainShotShortcut [-Startup]` | Start menu / Startup shortcuts for the PowerShell tray |
 
 Every command takes `-CasePath` to work on a case other than the current one.
 </details>
@@ -263,10 +294,11 @@ Every push runs the full test suite on GitHub Actions ([workflow](.github/workfl
 
 | Suite | Runs on | Covers |
 | --- | --- | --- |
+| App end-to-end | Windows (real desktop) | `ChainShot.exe` built from source: vectors, **real captures with the banner**, cases verified by `chainshot.py` and the module in both directions, shared settings, tampering, **RFC 3161** against an OpenSSL authority, HTML report, the window itself |
 | Python `unittest` | Linux, Windows, macOS; Python 3.9 and 3.13 | journal, tampering scenarios, seals, legacy v0, report, **RFC 3161 with a real OpenSSL timestamp authority** |
 | Pester | Windows PowerShell 5.1, PowerShell 7 on Windows and Linux | journal, tampering, seals, **real screen/window/rectangle captures**, **tray app and hotkey registration**, interoperability with Python in both directions |
 | Playwright | Chromium | extension loaded in a real browser: capture, files written by the downloads API, verification by `chainshot.py`, tamper detection, popup |
-| Shared vectors | all three | `tests/vectors/canonical-vectors.json`: identical canonical text, entry hashes and chain values |
+| Shared vectors | all four | `tests/vectors/canonical-vectors.json`: identical canonical text, entry hashes and chain values |
 
 Run them locally:
 
@@ -274,6 +306,7 @@ Run them locally:
 python -m unittest discover -s python/tests -v
 pwsh -c "Invoke-Pester ./windows/tests"
 npm install && npx playwright install chromium && npm run test:extension
+dotnet build app/ChainShot.csproj -c Release && python tests/app_e2e.py app/bin/Release/ChainShot.exe   # Windows
 ```
 
 ## Built with AI
@@ -288,6 +321,6 @@ As with any tool used for evidence, review it before relying on it, and report p
 ## Contributing, security, license
 
 - Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Changes to the journal format must update the
-  specification, the three implementations and the shared vectors together.
+  specification, the four implementations and the shared vectors together.
 - Security issues: see [SECURITY.md](SECURITY.md).
 - License: [MIT](LICENSE).
