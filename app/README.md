@@ -8,6 +8,8 @@ banner, hash files, write notes, verify, seal and produce the HTML report, from 
 - **Same journal format** as the PowerShell module, `chainshot.py` and the browser extension: a case can
   be continued with any of them and verified anywhere with `python chainshot.py verify <case>`.
 - **Command line included** for scripts (see below).
+- **Private**: no telemetry, no account, no update check; the only network request is the optional RFC 3161
+  timestamp, which sends a hash ([PRIVACY.md](../PRIVACY.md)). Open source, MIT license.
 
 ## Install
 
@@ -37,6 +39,9 @@ zoom levels. Keep it next to the executable.
 | Verify | **Verify** re-hashes every file and checks the chain and the seals. The badge in the header shows the result. |
 | Seal | **Seal** freezes the journal; **Seal + timestamp** also gets an RFC 3161 timestamp from a time-stamp authority (internet needed, default FreeTSA). Write the seal SHA-256 (copied to the clipboard) in your report. |
 | Report | **HTML report** writes `report\index.html` and opens it in your web browser. |
+| Deliver | **Export package** writes one zip: the case, `chainshot.py` to verify it, `VERIFY.txt` and `SHA256SUMS.txt`. It offers to seal first; the zip SHA-256 is copied to the clipboard and recorded in the journal. |
+| Review | **Filter** (`Ctrl+L`) narrows the journal to a tag, a word, a URL. The preview pane (`F3`) shows the selected capture and its details; double-click opens the file. |
+| Web pages | In the ChainShot browser extension, choose **ChainShot app**: its captures are saved into the case open here ([browser link](../docs/browser-link.md)). |
 
 | Hotkey (any application) | Capture |
 | --- | --- |
@@ -70,6 +75,9 @@ waits for the result. From `cmd.exe`, use `start /wait ChainShot.exe ...`.
 .\ChainShot.exe verify | Out-Host                     # exit code 0 intact, 1 problem, 2 error
 .\ChainShot.exe seal --tsa | Out-Host                 # --tsa <url> for another authority
 .\ChainShot.exe report --open | Out-Host
+.\ChainShot.exe package --seal | Out-Host             # zip next to the case folder (--out <file.zip>)
+.\ChainShot.exe use D:\Cases\DEMO-01 | Out-Host        # current case (shared with the module)
+.\ChainShot.exe register-browser | Out-Host           # browser link (done by the app at startup)
 ```
 
 Commands work on the current case (the one open in the app, also used by the PowerShell module) or
@@ -80,7 +88,9 @@ on `--case <folder>`. `ChainShot.exe --help` lists them all.
 Stored in `%APPDATA%\ChainShot`:
 
 - `state.json`: current case and tag, **shared with the PowerShell module** (`Set-ChainShotCase`, `Set-ChainShotTag`);
-- `gui.json`: recent cases and tags, default examiner and folder, TSA URL, options.
+- `gui.json`: recent cases and tags, default examiner and folder, TSA URL, options;
+- `com.chainshot.host.json`: the browser link manifest (with `HKCU\Software\<browser>\NativeMessagingHosts\com.chainshot.host`;
+  Options > *Accept captures from the browser extension* adds or removes them).
 
 Deleting them resets the application; cases are never stored there.
 

@@ -28,5 +28,13 @@ make tampering impossible, and it does not protect the examiner's computer.
   (some forensic tools still display it).
 - **No network access** except the optional RFC 3161 request, sent to the authority you choose.
 - **No dependency** in the verifier, so it can be audited and run offline.
-- The browser extension asks only for `activeTab`, `downloads` and `storage`: it cannot read
-  pages in the background and can capture a tab only after a click or its keyboard shortcut.
+- **No telemetry** of any kind ([PRIVACY.md](PRIVACY.md)).
+- The browser extension has no host permission: it cannot read pages in the background and can
+  capture a tab only after a click or its keyboard shortcut.
+- **Browser link** (native messaging): the browser starts the host (`ChainShot.exe` or
+  `chainshot.py native-host`) only for the extension IDs listed in its manifest. The host writes
+  nothing but PNG captures and journal entries into the *current* case, under the shared journal
+  lock; it keeps a fixed set of fields, checks the PNG signature and size, and ignores a browser
+  clock more than 10 minutes away from the host's.
+- **Evidence packages** contain the verifier itself and a `SHA256SUMS.txt`; the package hash is
+  recorded in the examiner's journal after it is built.

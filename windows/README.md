@@ -17,6 +17,7 @@ or `Ctrl+Alt+R` (region). `Get-Help <command> -Full` documents every command; th
 - On screens scaled to 125 % or 150 %, captures use physical pixels (per-monitor DPI awareness).
 - If a hotkey is already used by another program, a notification says so; the tray menu still works.
   The app and the PowerShell tray use the same hotkeys: run one of them at a time.
-- `Export-ChainShotReport` needs Python 3.9+ (`py`, `python` or `python3` on the PATH).
+- `Export-ChainShotReport` and `Export-ChainShotPackage` (evidence zip for delivery) need Python 3.9+
+  (`py`, `python` or `python3` on the PATH).
 
 Tests: `Invoke-Pester ./tests` (capture and tray tests run on Windows only).
