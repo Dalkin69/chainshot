@@ -205,7 +205,22 @@ class LegacyTest(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 # RFC 3161 with a real local TSA built with OpenSSL
 # --------------------------------------------------------------------------- #
-OPENSSL = shutil.which("openssl")
+def _usable_openssl():
+    """OpenSSL >= 1.1.1 with the 'ts' command (macOS ships LibreSSL, which lacks it)."""
+    exe = shutil.which("openssl")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "version"], capture_output=True, text=True, timeout=10).stdout
+        major, minor, patch = (int("".join(c for c in x if c.isdigit()) or 0) for x in out.split()[1].split(".")[:3])
+    except Exception:  # noqa: BLE001
+        return None
+    if not out.startswith("OpenSSL") or (major, minor, patch) < (1, 1, 1):
+        return None
+    return exe
+
+
+OPENSSL = _usable_openssl()
 
 
 def make_tsa(d: Path) -> Path:
@@ -224,7 +239,7 @@ def make_tsa(d: Path) -> Path:
     cfg.write_text(f"""[ tsa ]
 default_tsa = tsa_config1
 [ tsa_config1 ]
-dir = {d}
+dir = {d.as_posix()}
 serial = $dir/serial
 crypto_device = builtin
 signer_cert = $dir/tsa.crt
@@ -261,7 +276,7 @@ class TsaHandler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-@unittest.skipUnless(OPENSSL, "openssl not installed")
+@unittest.skipUnless(OPENSSL, "OpenSSL >= 1.1.1 with the ts command is required")
 class TestRfc3161(Base):
     def setUp(self):
         super().setUp()
