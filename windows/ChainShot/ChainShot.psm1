@@ -14,7 +14,7 @@
 
 Set-StrictMode -Version 2.0
 
-$script:Version       = '1.1.0'
+$script:Version       = '1.2.0'
 $script:ToolId        = "chainshot-ps/$($script:Version)"
 $script:FormatVersion = '1'
 $script:JournalName   = 'journal.jsonl'
@@ -824,6 +824,31 @@ function Open-InBrowser([string]$Path) {
     Invoke-Item -LiteralPath $Path
 }
 
+function Export-ChainShotPackage {
+    <#
+    .SYNOPSIS
+        Zips the case for delivery with chainshot.py, VERIFY.txt and SHA256SUMS.txt
+        (calls chainshot.py; Python 3.9+ required).
+    .PARAMETER Seal
+        Seal the journal first.
+    .PARAMETER Timestamp
+        Seal first with an RFC 3161 timestamp (default TSA, or -TsaUrl).
+    .EXAMPLE
+        Export-ChainShotPackage -Timestamp -Path D:\Delivery\DEMO-01.zip
+    #>
+    [CmdletBinding()]
+    param([string]$CasePath, [string]$Path, [switch]$Seal, [switch]$Timestamp, [string]$TsaUrl)
+    $CasePath = Resolve-CasePath $CasePath
+    $py = Get-ChainShotPython
+    if (-not $py) { throw 'Python 3.9+ and chainshot.py are required for packages (see README).' }
+    $arguments = @($py.Script, 'package', $CasePath)
+    if ($Path) { $arguments += @('-o', [System.IO.Path]::GetFullPath($Path)) }
+    if ($Timestamp -or $TsaUrl) { $arguments += '--tsa'; if ($TsaUrl) { $arguments += $TsaUrl } }
+    elseif ($Seal) { $arguments += '--seal' }
+    & $py.Exe @arguments
+    if ($LASTEXITCODE -ne 0) { throw "chainshot.py package failed (exit code $LASTEXITCODE)" }
+}
+
 function Export-ChainShotReport {
     <#
     .SYNOPSIS
@@ -1037,7 +1062,7 @@ function Install-ChainShotShortcut {
 Export-ModuleMember -Function @(
     'New-ChainShotCase', 'Set-ChainShotCase', 'Set-ChainShotTag', 'Get-ChainShotStatus',
     'Invoke-ChainShot', 'Add-ChainShotFile', 'Add-ChainShotNote', 'Read-ChainShotJournal',
-    'Test-ChainShotCase', 'New-ChainShotSeal', 'Export-ChainShotReport',
+    'Test-ChainShotCase', 'New-ChainShotSeal', 'Export-ChainShotReport', 'Export-ChainShotPackage',
     'Start-ChainShotTray', 'Install-ChainShotShortcut',
     'Get-ChainShotCanonicalString', 'Get-ChainShotEntryHash', 'Get-ChainShotNextChain'
 )

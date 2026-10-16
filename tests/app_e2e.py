@@ -209,6 +209,8 @@ def seal_with_local_rfc3161_tsa():
     assert "RFC 3161 timestamp:" in out, out
     code, out = run("verify", CASE)
     assert "imprint OK" in out, out
+    ts_entry = [json.loads(x) for x in (CASE / "journal.jsonl").read_text(encoding="utf-8").splitlines()][-1]
+    assert ts_entry["type"] == "timestamp" and "(local clock " in ts_entry["note"], ts_entry
     # The token signature is checked by the reference implementation.
     assert py_verify(CASE, "--tsa-ca", str(tsa / "ca.crt")) == 0
     code, out = run("seal", CASE, "--tsa", "http://127.0.0.1:9/tsr", ok=(1,))
@@ -234,6 +236,97 @@ def gui_smoke_test():
     print("  smoke:", info)
     if info["hotkeys_failed"]:
         print(f"::warning title=Hotkeys::not registered: {info['hotkeys_failed']}")
+
+
+def native(*messages, timeout=60):
+    """Talk to ChainShot.exe as the browser does (Chrome native messaging framing)."""
+    import struct
+    data = b"".join(struct.pack("<I", len(b)) + b for b in (json.dumps(m).encode() for m in messages))
+    p = subprocess.run([str(EXE), "chrome-extension://dcccfnbiglhpbcdhbmokfilfgpfnmikf/", "--parent-window=0"],
+                       input=data, capture_output=True, timeout=timeout, env=ENV)
+    assert p.returncode == 0, p.stderr
+    out, replies = p.stdout, []
+    while out:
+        (n,) = struct.unpack("<I", out[:4])
+        replies.append(json.loads(out[4:4 + n]))
+        out = out[4 + n:]
+    return replies
+
+
+@test
+def browser_link_host_protocol():
+    import base64
+    from test_v12 import tiny_png
+    d = OUT / "case-link"
+    run("new-case", d, "--case", "LINK", "--examiner", "Analyst")
+    png = base64.b64encode(tiny_png()).decode()
+    now = cs.fmt_utc(cs.utc_now())
+    hello, tag, cap, stale, bad, note, ver = native(
+        {"type": "hello"},
+        {"type": "set_tag", "tag": "W7"},
+        {"type": "capture", "png_base64": png, "utc": now, "expected_seq": 2, "url": "https://example.org/",
+         "title": "Example é", "tag": "W7", "note": "from the browser", "source": "chainshot-ext/1.2.0",
+         "extra": {"viewport": "4x3", "user_agent": "UA"}},
+        {"type": "capture", "png_base64": png, "utc": now, "expected_seq": 2},
+        {"type": "capture", "png_base64": "bm90IGEgcG5n", "expected_seq": 3},
+        {"type": "note", "text": "noted in the browser"},
+        {"type": "verify"},
+    )
+    assert hello["ok"] and hello["case"]["next_seq"] == 2 and hello["case"]["name"] == "LINK", hello
+    assert tag["tag"] == "W7", tag
+    assert cap["ok"] and cap["entry"]["seq"] == "2" and cap["entry"]["utc"] == now, cap
+    assert stale["ok"] is False and stale["retry"] is True and stale["case"]["next_seq"] == 3, stale
+    assert bad["ok"] is False and "PNG" in bad["error"], bad
+    assert note["ok"] and note["entry"]["seq"] == "3", note
+    assert ver["intact"] is True and ver["entries"] == 3, ver
+    entries = [json.loads(x) for x in (d / "journal.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert entries[1]["type"] == "browser" and entries[1]["title"] == "Example é" and entries[1]["tag"] == "W7", entries[1]
+    assert entries[1]["source"] == "chainshot-ext/1.2.0" and entries[1]["extra"]["via"].startswith("chainshot-app/"), entries[1]
+    assert entries[2]["tag"] == "W7", "a note without tag gets the current tag"
+    assert py_verify(d) == 0
+
+
+@test
+def browser_link_registration():
+    import winreg
+    code, out = run("register-browser", "--extension-id", "abcdefghijklmnopabcdefghijklmnop")
+    try:
+        for key in (r"Software\Google\Chrome", r"Software\Microsoft\Edge", r"Software\BraveSoftware\Brave-Browser"):
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key + r"\NativeMessagingHosts\com.chainshot.host") as k:
+                manifest = Path(winreg.QueryValueEx(k, "")[0])
+        m = json.loads(manifest.read_text(encoding="utf-8"))
+        assert Path(m["path"]) == EXE, m
+        assert "chrome-extension://dcccfnbiglhpbcdhbmokfilfgpfnmikf/" in m["allowed_origins"], m
+        assert "chrome-extension://abcdefghijklmnopabcdefghijklmnop/" in m["allowed_origins"], m
+    finally:
+        run("register-browser", "--remove")
+    try:
+        winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Google\Chrome\NativeMessagingHosts\com.chainshot.host")
+        raise AssertionError("key still present after --remove")
+    except FileNotFoundError:
+        pass
+
+
+@test
+def evidence_package():
+    import zipfile
+    out = OUT / "packages" / "app-case.zip"
+    code, text = run("package", CASE, "--out", out, "--seal")
+    assert out.exists(), text
+    with zipfile.ZipFile(out) as z:
+        names = z.namelist()
+        assert "chainshot.py" in names and "VERIFY.txt" in names and "SHA256SUMS.txt" in names, names
+        assert not any(n.endswith(".journal.lock") for n in names), names
+        for line in z.read("SHA256SUMS.txt").decode().splitlines():
+            sha, name = line.split("  ", 1)
+            assert cs.sha256_hex(z.read(name)) == sha, name
+        assert z.read("chainshot.py") == (REPO / "python" / "chainshot.py").read_bytes(), "embedded verifier is the repo's"
+        x = OUT / "package-extracted"
+        z.extractall(x)
+    p = subprocess.run([sys.executable, str(x / "chainshot.py"), "verify", str(x / CASE.name)], capture_output=True, text=True)
+    assert p.returncode == 0, p.stdout + p.stderr
+    last = json.loads((CASE / "journal.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert last["tag"] == "PACKAGE" and cs.file_hashes(out)[0] in last["note"], last
 
 
 @test

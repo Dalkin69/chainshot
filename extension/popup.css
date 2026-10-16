@@ -35,3 +35,7 @@ kbd { font: 11px ui-monospace, Consolas, monospace; padding: 1px 4px; border-rad
 .card code, code { font: 11px ui-monospace, Consolas, monospace; word-break: break-all; }
 #message { min-height: 18px; margin: 10px 0 0; font-weight: 600; }
 #message.ok { color: var(--ok); } #message.bad { color: var(--bad); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 6px 8px; background: transparent; color: var(--muted); font-weight: 600; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+#appLink p { margin: 0 0 6px; }

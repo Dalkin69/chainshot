@@ -134,6 +134,8 @@ namespace ChainShot
             ev.DropDownItems.Add(CaseItem(Item("&Seal the journal", (s, e) => Seal(false))));
             ev.DropDownItems.Add(CaseItem(Item("Seal + RFC 3161 &timestamp", (s, e) => Seal(true))));
             ev.DropDownItems.Add(CaseItem(Item("HTML &report", (s, e) => MakeReport(), Keys.Control | Keys.R)));
+            ev.DropDownItems.Add(new ToolStripSeparator());
+            ev.DropDownItems.Add(CaseItem(Item("Export evidence &package...", (s, e) => ExportPackage(), Keys.Control | Keys.E)));
 
             var opt = new ToolStripMenuItem("&Options");
             var copy = new ToolStripMenuItem("&Copy added files into the case folder") { Checked = settings.CopyAddedFiles, CheckOnClick = true };
@@ -157,6 +159,20 @@ namespace ChainShot
                 if (v != null) { settings.TsaUrl = v.Trim().Length > 0 ? v.Trim() : Sealer.DefaultTsa; settings.Save(); }
             }));
             opt.DropDownItems.Add(Item("Add ChainShot to the &Start menu", (s, e) => CreateStartMenuShortcut(true)));
+            var link = new ToolStripMenuItem("Accept captures from the &browser extension") { Checked = settings.BrowserLink, CheckOnClick = true };
+            link.CheckedChanged += (s, e) =>
+            {
+                settings.BrowserLink = link.Checked;
+                settings.Save();
+                try
+                {
+                    if (link.Checked) BrowserLink.Register(Application.ExecutablePath); else BrowserLink.Unregister();
+                    SetStatus(link.Checked ? "Browser link on: in the ChainShot extension, choose \"ChainShot app\" to save captures into this case."
+                                           : "Browser link off.");
+                }
+                catch (Exception ex) { Ui.Error(this, "Browser link: " + ex.Message); }
+            };
+            opt.DropDownItems.Add(link);
 
             var help = new ToolStripMenuItem("&Help");
             help.DropDownItems.Add(Item("&Documentation", (s, e) => OpenUrl(AppInfo.RepoUrl + "#readme")));
@@ -245,6 +261,7 @@ namespace ChainShot
             bar.Controls.Add(Btn("Seal", (s, e) => Seal(false), "Freeze the current journal in a seal file whose SHA-256 you can write in your report"));
             bar.Controls.Add(Btn("Seal + timestamp", (s, e) => Seal(true), "Seal and get an RFC 3161 timestamp from a trusted time-stamp authority (internet)"));
             bar.Controls.Add(Btn("HTML report", (s, e) => MakeReport(), "Generate report/index.html and open it in your web browser"));
+            bar.Controls.Add(Btn("Export package", (s, e) => ExportPackage(), "One zip for delivery: the case, chainshot.py to verify it, VERIFY.txt and SHA256SUMS.txt"));
             bar.Controls.Add(Btn("Open folder", (s, e) => OpenFolder(), "Open the case folder in Explorer"));
             return bar;
         }
@@ -354,6 +371,12 @@ namespace ChainShot
             if (hotkeys != null) return;
             foregroundTimer.Tick += (sender, args) => TrackForeground();
             foregroundTimer.Start();
+            // Keep the browser link pointing at this executable (it may have been moved).
+            if (settings.BrowserLink && !BrowserLink.IsRegisteredFor(Application.ExecutablePath))
+            {
+                try { BrowserLink.Register(Application.ExecutablePath); } catch (Exception) { /* optional feature */ }
+            }
+            WatchState();
             hotkeys = new HotkeyWindow();
             hotkeys.Pressed += id => DoCapture(id == HotWindow ? CaptureMode.Window : id == HotRegion ? CaptureMode.Region : CaptureMode.Screen, Source.Hotkey);
             if (!hotkeys.Register(HotScreen, Keys.P)) HotkeyFailures.Add("Ctrl+Alt+P");
@@ -594,6 +617,40 @@ namespace ChainShot
                 fresh.Save();
             }
             catch (Exception ex) { SetStatus("Could not save settings: " + ex.Message, true); }
+        }
+
+        // The extension (tag) and the PowerShell module (case, tag) change state.json too.
+        FileSystemWatcher stateWatcher;
+        readonly Timer stateTimer = new Timer { Interval = 300 };
+
+        void WatchState()
+        {
+            try
+            {
+                Directory.CreateDirectory(SharedState.Dir);
+                stateWatcher = new FileSystemWatcher(SharedState.Dir, "state.json") { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName, SynchronizingObject = this };
+                FileSystemEventHandler h = (s, e) => { stateTimer.Stop(); stateTimer.Start(); };
+                stateWatcher.Changed += h;
+                stateWatcher.Created += h;
+                stateWatcher.EnableRaisingEvents = true;
+                stateTimer.Tick += (s, e) => { stateTimer.Stop(); ApplyExternalState(); };
+            }
+            catch (Exception) { /* not essential */ }
+        }
+
+        void ApplyExternalState()
+        {
+            var fresh = SharedState.Load();
+            if (fresh.Tag != state.Tag)
+            {
+                state.Tag = fresh.Tag;
+                if (!tagBox.Focused) tagBox.Text = fresh.Tag;
+            }
+            if (!string.IsNullOrEmpty(fresh.CasePath) && fresh.CasePath != state.CasePath && CaseFolder.IsCase(fresh.CasePath))
+            {
+                OpenCase(fresh.CasePath, true);
+                SetStatus("Case switched by another ChainShot tool: " + fresh.CasePath);
+            }
         }
 
         // ----------------------------------------------------------------- journal
@@ -859,11 +916,69 @@ namespace ChainShot
             try { Clipboard.SetText(r.Sha256); } catch (Exception) { }
             string msg = string.Format("Seal of entries 1-{0} written:\n{1}\n\nSHA-256 (copied to the clipboard):\n{2}\n\n", r.Entries, r.SealPath, r.Sha256);
             if (timestamp)
-                msg += r.TimestampError == null ? "RFC 3161 timestamp: " + r.TimestampTime + " (" + tsa + ")\n\n"
-                                                : "The timestamp could not be obtained: " + r.TimestampError + "\nThe local seal is valid; try again later.\n\n";
+            {
+                msg += r.TimestampError == null ? "RFC 3161 timestamp: " + r.TimestampTime + " (" + tsa + ")\n"
+                                                : "The timestamp could not be obtained: " + r.TimestampError + "\nThe local seal is valid; try again later.\n";
+                if (r.ClockOffset.HasValue)
+                {
+                    msg += "This computer's clock vs the TSA: " + r.ClockOffset.Value.ToString("+0.0;-0.0;+0.0", CultureInfo.InvariantCulture) + " s\n";
+                    if (Math.Abs(r.ClockOffset.Value) > Sealer.ClockWarnSeconds)
+                        msg += "WARNING: the clock is off by more than a minute: entry times are shifted accordingly. Synchronise the clock (Settings > Time > Sync now).\n";
+                }
+                msg += "\n";
+            }
             msg += "Write this SHA-256 in your signed report or send it to your client separately: it proves the journal was not changed afterwards.";
             SetStatus("Sealed " + r.Entries + " entries.", r.TimestampError != null);
             MessageBox.Show(this, msg, "ChainShot - seal", MessageBoxButtons.OK, r.TimestampError == null ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+
+        async void ExportPackage()
+        {
+            if (current == null || busy) return;
+            var folder = current;
+            var entries = folder.ReadEntries();
+            int lastSeal = entries.FindLastIndex(x => x.Str("type") == "seal");
+            int after = entries.Count - 1 - lastSeal - (lastSeal >= 0 && lastSeal + 1 < entries.Count && entries[lastSeal + 1].Str("type") == "timestamp" ? 1 : 0);
+            bool seal = false, tsa = false;
+            if (lastSeal < 0 || after > 0)
+            {
+                var r = MessageBox.Show(this, (lastSeal < 0 ? "The journal has no seal." : after + " entr" + (after == 1 ? "y was" : "ies were") + " added after the last seal.") +
+                    "\n\nSeal it with an RFC 3161 timestamp before packaging?\nYes = seal + timestamp (internet), No = local seal only, Cancel = package as it is.",
+                    "ChainShot - package", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                seal = r != DialogResult.Cancel;
+                tsa = r == DialogResult.Yes;
+            }
+            string target;
+            using (var d = new SaveFileDialog { Filter = "Zip archive (*.zip)|*.zip", FileName = Path.GetFileName(Package.DefaultPath(folder)),
+                                                InitialDirectory = Path.GetDirectoryName(folder.Root), Title = "Evidence package" })
+            {
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                target = d.FileName;
+            }
+            string tsaUrl = tsa ? settings.TsaUrl : null;
+            SetBusy(true, "Building the evidence package...");
+            Package.Result res = null;
+            string tsaError = null;
+            try
+            {
+                res = await Task.Run(() =>
+                {
+                    if (seal) tsaError = Sealer.Seal(folder, "SEAL", tsaUrl).TimestampError;
+                    return Package.Create(folder, target);
+                });
+            }
+            catch (Exception ex) { Ui.Error(this, "Package refused: " + ex.Message); }
+            finally { SetBusy(false); }
+            ReloadJournal(true);
+            if (res == null) return;
+            try { Clipboard.SetText(res.Sha256); } catch (Exception) { }
+            Inform("Package written: " + res.Path);
+            var answer = MessageBox.Show(this, string.Format("Evidence package written ({0} files):\n{1}\n\nSHA-256 (copied to the clipboard):\n{2}\n\n{3}" +
+                "It contains the case, chainshot.py to verify it, VERIFY.txt with the instructions and SHA256SUMS.txt.\n" +
+                "Send the SHA-256 to the recipient by another channel.\n\nShow the file in Explorer?",
+                res.Files, res.Path, res.Sha256, tsaError != null ? "The timestamp failed (" + tsaError + "); the journal has a local seal.\n\n" : ""),
+                "ChainShot - package", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+            if (answer == DialogResult.Yes) Start("explorer.exe", "/select,\"" + res.Path + "\"");
         }
 
         async void MakeReport()

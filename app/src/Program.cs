@@ -29,6 +29,11 @@ Command line (the current case is the one selected in the app or with Set-ChainS
   verify   [<folder>] [--json]
   seal     [<folder>] [--tsa [<url>]] [--tag <t>]
   report   [<folder>] [--out <file.html>] [--open]
+  use      [<folder>]                 show or set the current case
+  package  [<folder>] [--out <file.zip>] [--seal] [--tsa [<url>]]
+                                      zip the case with chainshot.py, VERIFY.txt and SHA256SUMS.txt
+  register-browser [--extension-id <id>] [--remove]
+                                      let the browser extension save captures into the current case
   selftest <canonical-vectors.json>
   --version | --help
 
@@ -38,6 +43,12 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
         [STAThread]
         static int Main(string[] args)
         {
+            // Started by the browser for the extension (Chrome native messaging): binary stdin/stdout.
+            if (args.Length > 0 && args[0].StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase))
+            {
+                try { return BrowserLink.Serve(Console.OpenStandardInput(), Console.OpenStandardOutput()); }
+                catch (Exception) { return 2; }
+            }
             if (args.Length == 0 || args[0] == "--minimized" || args[0] == "--smoke-test") return RunGui(args);
             AttachOutput();
             try { return RunCli(args); }
@@ -99,7 +110,7 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
         {
             public readonly List<string> Positional = new List<string>();
             readonly Dictionary<string, string> named = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            static readonly HashSet<string> Flags = new HashSet<string> { "copy", "json", "open" };
+            static readonly HashSet<string> Flags = new HashSet<string> { "copy", "json", "open", "remove", "seal" };
 
             public Options(string[] args)
             {
@@ -175,6 +186,43 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
                     st.CasePath = folder.Root;
                     st.Save();
                     w.WriteLine("Case created: " + folder.Root + " (now the current case)");
+                    return 0;
+                }
+
+                case "use":
+                {
+                    var st = SharedState.Load();
+                    if (o.Positional.Count > 0)
+                    {
+                        if (!CaseFolder.IsCase(o.Positional[0])) throw new CliError("not a ChainShot case folder (no " + Format.CaseFileName + "): " + Path.GetFullPath(o.Positional[0]));
+                        st.CasePath = CaseFolder.Open(o.Positional[0]).Root;
+                        st.Save();
+                    }
+                    w.WriteLine("Current case: " + (st.CasePath.Length > 0 ? st.CasePath : "(none)"));
+                    return 0;
+                }
+
+                case "register-browser":
+                {
+                    if (o.Has("remove")) { BrowserLink.Unregister(); w.WriteLine("Browser link removed."); return 0; }
+                    var ids = o.Get("extension-id") != null ? new[] { o.Get("extension-id") } : new string[0];
+                    w.WriteLine("Browser link registered for Chrome, Edge, Brave, Chromium and Vivaldi: " + BrowserLink.Register(Application.ExecutablePath, ids));
+                    return 0;
+                }
+
+                case "package":
+                {
+                    var folder = ResolveCase(o.Positional.FirstOrDefault() ?? o.Get("case"));
+                    if (o.Has("seal") || o.Has("tsa"))
+                    {
+                        var r = Sealer.Seal(folder, "SEAL", o.Get("tsa"));
+                        w.WriteLine("Seal of entries 1-" + r.Entries + ": SHA-256 " + r.Sha256);
+                        if (r.TimestampError != null) Console.Error.WriteLine("RFC 3161 timestamp failed: " + r.TimestampError + " (the local seal is valid)");
+                    }
+                    var p = Package.Create(folder, o.Get("out") ?? Package.DefaultPath(folder));
+                    w.WriteLine("Package written: " + p.Path);
+                    w.WriteLine("    SHA-256 " + p.Sha256);
+                    w.WriteLine("Send this SHA-256 to the recipient by another channel (or put it in your report).");
                     return 0;
                 }
 
@@ -270,6 +318,12 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
                     {
                         if (r.TimestampError != null) { Console.Error.WriteLine("RFC 3161 timestamp failed: " + r.TimestampError + " (the local seal is valid)"); return 1; }
                         w.WriteLine("RFC 3161 timestamp: " + r.TimestampTime + " (TSA " + o.Get("tsa") + ")");
+                        if (r.ClockOffset.HasValue)
+                        {
+                            w.WriteLine("Local clock offset vs the TSA: " + r.ClockOffset.Value.ToString("+0.0;-0.0;+0.0", CultureInfo.InvariantCulture) + " s");
+                            if (Math.Abs(r.ClockOffset.Value) > Sealer.ClockWarnSeconds)
+                                Console.Error.WriteLine("WARNING: this computer's clock is off by " + r.ClockOffset.Value.ToString("+0;-0", CultureInfo.InvariantCulture) + " s: entry times are shifted accordingly.");
+                        }
                     }
                     w.WriteLine("Write the seal SHA-256 in your signed report or send it to your client separately.");
                     return 0;
