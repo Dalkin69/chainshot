@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- Neutral demo page captured by the CI for the README screenshots (tests/app_e2e.py). -->
+<html lang="en"><head><meta charset="utf-8"><title>Account activity - Example Corp portal</title>
+<style>
+  body{margin:0;font:15px/1.5 "Segoe UI",system-ui,sans-serif;background:#f4f6f9;color:#1d2433}
+  header{background:#0f3d6e;color:#fff;padding:14px 28px;font-weight:600;font-size:17px}
+  main{padding:22px 28px} h1{font-size:22px;margin:0 0 4px} p{margin:0 0 16px;color:#5a6475}
+  table{border-collapse:collapse;width:100%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  th,td{padding:9px 12px;border-bottom:1px solid #e6e9ef;text-align:left} th{font-size:12px;text-transform:uppercase;color:#5a6475}
+  .warn{color:#b3261e;font-weight:600}
+</style></head><body>
+<header>Example Corp - Employee portal</header>
+<main>
+  <h1>Account activity: j.martin</h1>
+  <p>Sign-ins of the last 7 days (demo data, documentation IP ranges).</p>
+  <table>
+    <tr><th>Date (UTC)</th><th>Source address</th><th>Device</th><th>Result</th></tr>
+    <tr><td>2026-10-12 07:58</td><td>198.51.100.24</td><td>Windows - Edge</td><td>Success</td></tr>
+    <tr><td>2026-10-13 08:03</td><td>198.51.100.24</td><td>Windows - Edge</td><td>Success</td></tr>
+    <tr><td>2026-10-14 02:41</td><td>203.0.113.77</td><td>Unknown - Firefox</td><td class="warn">Success (new device)</td></tr>
+    <tr><td>2026-10-14 02:44</td><td>203.0.113.77</td><td>Unknown - Firefox</td><td class="warn">Password changed</td></tr>
+    <tr><td>2026-10-15 08:10</td><td>198.51.100.24</td><td>Windows - Edge</td><td>Failed (password)</td></tr>
+  </table>
+</main></body></html>

@@ -87,7 +87,7 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
                     {
                         try
                         {
-                            var result = await form.SmokeTest(Path.GetFullPath(png));
+                            var result = await form.SmokeTest(Path.GetFullPath(png), o.Get("shots"));
                             Console.Out.WriteLine(MiniJson.Serialize(result));
                         }
                         catch (Exception ex) { Console.Error.WriteLine("smoke test failed: " + ex); code = 1; }

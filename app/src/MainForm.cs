@@ -38,8 +38,14 @@ namespace ChainShot
         readonly NumericUpDown delayBox = new NumericUpDown { Width = 48, Minimum = 0, Maximum = 60 };
         readonly List<Control> caseControls = new List<Control>();
 
-        // journal
+        // journal, filter and preview
         readonly DataGridView grid = new DataGridView();
+        readonly SplitContainer split = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel2, BorderStyle = BorderStyle.None };
+        readonly TextBox filterBox = new TextBox { Width = 260 };
+        readonly Label filterInfo = new Label { AutoSize = true, ForeColor = Ui.Muted, Margin = new Padding(8, 7, 3, 3) };
+        readonly PictureBox previewImage = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(0xF3, 0xF2, 0xEE) };
+        readonly Label previewText = new Label { Dock = DockStyle.Bottom, Height = 150, Padding = new Padding(8, 6, 8, 6), Font = new Font("Segoe UI", 8.5f) };
+        readonly Label previewTitle = new Label { Dock = DockStyle.Top, Height = 26, Padding = new Padding(8, 6, 8, 0), Font = new Font("Segoe UI Semibold", 9f), Text = "Preview" };
         readonly Panel emptyPanel = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
         readonly FlowLayoutPanel recentPanel = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
 
@@ -78,7 +84,7 @@ namespace ChainShot
             status.Items.Add(statusText);
             status.Items.Add(hotkeyText);
 
-            Controls.Add(grid);
+            Controls.Add(BuildJournalArea());
             Controls.Add(emptyPanel);
             Controls.Add(actions);
             Controls.Add(bar);
@@ -184,7 +190,12 @@ namespace ChainShot
                 "MIT License. Built with the help of AI (Claude, Anthropic).\n\n" + AppInfo.RepoUrl,
                 "About ChainShot", MessageBoxButtons.OK, MessageBoxIcon.Information)));
 
-            menu.Items.AddRange(new ToolStripItem[] { file, cap, ev, opt, help });
+            var view = new ToolStripMenuItem("&View");
+            var preview = new ToolStripMenuItem("&Preview pane") { Checked = settings.ShowPreview, CheckOnClick = true, ShortcutKeys = Keys.F3 };
+            preview.CheckedChanged += (s, e) => { settings.ShowPreview = preview.Checked; settings.Save(); split.Panel2Collapsed = !preview.Checked; };
+            view.DropDownItems.Add(preview);
+            view.DropDownItems.Add(Item("&Filter the journal", (s, e) => { filterBox.Focus(); filterBox.SelectAll(); }, Keys.Control | Keys.L));
+            menu.Items.AddRange(new ToolStripItem[] { file, cap, ev, view, opt, help });
             MainMenuStrip = menu;
         }
 
@@ -264,6 +275,81 @@ namespace ChainShot
             bar.Controls.Add(Btn("Export package", (s, e) => ExportPackage(), "One zip for delivery: the case, chainshot.py to verify it, VERIFY.txt and SHA256SUMS.txt"));
             bar.Controls.Add(Btn("Open folder", (s, e) => OpenFolder(), "Open the case folder in Explorer"));
             return bar;
+        }
+
+        Control BuildJournalArea()
+        {
+            var filterBar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8, 4, 8, 2), WrapContents = false };
+            filterBar.Controls.Add(Ui.Label("Filter"));
+            filterBar.Controls.Add(filterBox);
+            filterBar.Controls.Add(filterInfo);
+            filterBox.TextChanged += (s, e) => ApplyFilter();
+            filterBox.HandleCreated += (s, e) => Native.SetCueBanner(filterBox, "tag, text, file, URL...");
+            tips.SetToolTip(filterBox, "Show only the entries containing this text (tag, type, file, note, URL, title)");
+            split.Panel1.Controls.Add(grid);
+            split.Panel1.Controls.Add(filterBar);
+            var info = new Panel { Dock = DockStyle.Fill };
+            info.Controls.Add(previewImage);
+            info.Controls.Add(previewText);
+            info.Controls.Add(previewTitle);
+            split.Panel2.Controls.Add(info);
+            previewImage.Cursor = Cursors.Hand;
+            previewImage.DoubleClick += (s, e) => OpenEntry(SelectedEntry());
+            tips.SetToolTip(previewImage, "Double-click to open the file");
+            split.Panel2Collapsed = !settings.ShowPreview;
+            split.HandleCreated += (s, e) => { try { split.SplitterDistance = Math.Max(300, split.Width - 330); } catch (InvalidOperationException) { } };
+            grid.SelectionChanged += (s, e) => UpdatePreview(SelectedEntry());
+            return split;
+        }
+
+        void ApplyFilter()
+        {
+            string f = filterBox.Text.Trim();
+            int shown = 0;
+            grid.CurrentCell = null;
+            foreach (DataGridViewRow row in grid.Rows)
+            {
+                var e = row.Tag as JsonObject;
+                bool visible = f.Length == 0 || e == null || e.Where(kv => kv.Key != "chain").Any(kv => Convert.ToString(kv.Value).IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0);
+                row.Visible = visible;
+                if (visible) shown++;
+            }
+            filterInfo.Text = f.Length == 0 ? "" : shown + " of " + grid.Rows.Count + " entries";
+        }
+
+        void UpdatePreview(JsonObject e)
+        {
+            var old = previewImage.Image;
+            previewImage.Image = null;
+            if (old != null) old.Dispose();
+            if (e == null || current == null)
+            {
+                previewTitle.Text = "Preview";
+                previewText.Text = "Select an entry to see the capture and its details.";
+                return;
+            }
+            previewTitle.Text = "#" + e.Str("seq") + "  " + e.Str("type") + (e.Str("tag").Length > 0 ? "  -  " + e.Str("tag") : "");
+            string file = e.Str("file");
+            string lower = file.ToLowerInvariant();
+            if (file.Length > 0 && (lower.EndsWith(".png") || lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".bmp") || lower.EndsWith(".gif")))
+            {
+                try
+                {
+                    // Read into memory: never keep a lock on an evidence file.
+                    byte[] bytes = File.ReadAllBytes(current.Resolve(file));
+                    using (var ms = new MemoryStream(bytes))
+                    using (var img = Image.FromStream(ms)) previewImage.Image = new Bitmap(img);
+                }
+                catch (Exception) { /* missing or not an image: details only */ }
+            }
+            var lines = new List<string> { "UTC  " + e.Str("utc").Replace("T", " ") + "   (" + e.Str("local") + ")" };
+            if (file.Length > 0) lines.Add("File  " + file + (e.Str("size").Length > 0 ? "  (" + e.Str("size") + " bytes)" : ""));
+            if (e.Str("sha256").Length > 0) lines.Add("SHA-256  " + e.Str("sha256"));
+            if (e.Str("title").Length > 0) lines.Add("Title  " + e.Str("title"));
+            if (e.Str("url").Length > 0) lines.Add("URL  " + e.Str("url"));
+            if (e.Str("note").Length > 0) lines.Add("Note  " + e.Str("note"));
+            lines.Add("By  " + e.Str("examiner") + " @ " + e.Str("host") + "  -  " + e.Str("source"));
+            previewText.Text = string.Join("\n", lines);
         }
 
         void BuildGrid()
@@ -528,7 +614,7 @@ namespace ChainShot
         void ShowCase(CaseFolder folder)
         {
             bool has = folder != null;
-            grid.Visible = has;
+            split.Visible = has;
             emptyPanel.Visible = !has;
             foreach (var c in caseControls) c.Enabled = has;
             foreach (ToolStripItem top in MainMenuStrip.Items)
@@ -697,6 +783,7 @@ namespace ChainShot
                 row.Cells["evidence"].ToolTipText = evidence;
             }
             grid.ResumeLayout();
+            if (filterBox.Text.Trim().Length > 0) ApplyFilter();
             grid.ClearSelection();
             if ((scrollToEnd || atEnd) && grid.Rows.Count > 0) { try { grid.FirstDisplayedScrollingRowIndex = grid.Rows.Count - 1; } catch (InvalidOperationException) { } }
             UpdateInfo(quick.Entries.Count);
@@ -1145,29 +1232,40 @@ namespace ChainShot
 
         // -------------------------------------------------------------- smoke test
         /// <summary>Used by CI: shows the window, saves a screenshot of it and returns a summary.</summary>
-        public async Task<JsonObject> SmokeTest(string pngPath)
+        public async Task<JsonObject> SmokeTest(string pngPath, string shotsDir)
         {
-            // A tidy window for the README picture: fits the screen, no selection, no tooltip.
+            // A tidy window for the README pictures: fits the screen, no tooltip.
             Rectangle wa = Screen.FromControl(this).WorkingArea;
             WindowState = FormWindowState.Normal;
             Bounds = new Rectangle(wa.X + 8, wa.Y + 8, Math.Min(1000, wa.Width - 16), Math.Min(640, wa.Height - 16));
             Cursor.Position = new Point(wa.Right - 2, wa.Bottom - 2);
             await Task.Delay(1500);
+            for (int i = 0; i < 40 && busy; i++) await Task.Delay(250); // let the first verification finish
             Activate();
+            // Show the preview of the last capture.
             grid.ClearSelection();
-            await Task.Delay(500);
-            Rectangle b = Native.GetWindowBounds(Handle); // visible frame, without the shadow
-            using (var bmp = new Bitmap(b.Width, b.Height))
+            var lastShot = grid.Rows.Cast<DataGridViewRow>().LastOrDefault(r => { var e = r.Tag as JsonObject; return e != null && (e.Str("type") == "screenshot" || e.Str("type") == "browser"); });
+            if (lastShot != null) { lastShot.Selected = true; UpdatePreview(lastShot.Tag as JsonObject); }
+            await Task.Delay(700);
+            SaveWindowShot(Handle, pngPath);
+            if (!string.IsNullOrEmpty(shotsDir))
             {
-                bool grabbed = false;
-                try
+                Directory.CreateDirectory(shotsDir);
+                using (var d = new NewCaseDialog("Analyst", @"D:\Cases"))
                 {
-                    using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(b.Location, Point.Empty, b.Size);
-                    grabbed = true;
+                    d.Show(this);
+                    d.Location = new Point(Left + 120, Top + 110);
+                    d.SetSample("DEMO-02 Laptop of the finance department");
+                    await Task.Delay(800);
+                    SaveWindowShot(d.Handle, Path.Combine(shotsDir, "app-new-case.png"));
+                    d.Close();
                 }
-                catch (Exception) { }
-                if (!grabbed) DrawToBitmap(bmp, new Rectangle(Point.Empty, b.Size));
-                bmp.Save(pngPath, System.Drawing.Imaging.ImageFormat.Png);
+                // Tray menu, opened next to the window.
+                var menu = tray.ContextMenuStrip;
+                menu.Show(this, new Point(ClientSize.Width - 260, 120));
+                await Task.Delay(600);
+                SaveWindowShot(menu.Handle, Path.Combine(shotsDir, "app-tray-menu.png"));
+                menu.Close();
             }
             var o = new JsonObject();
             o["rows"] = grid.Rows.Count.ToString(CultureInfo.InvariantCulture);
@@ -1176,7 +1274,18 @@ namespace ChainShot
             o["hotkeys_failed"] = HotkeyFailures.Cast<object>().ToList();
             o["menu_items"] = MainMenuStrip.Items.OfType<ToolStripMenuItem>().Sum(m => m.DropDownItems.Count).ToString(CultureInfo.InvariantCulture);
             o["tray_items"] = tray.ContextMenuStrip.Items.Count.ToString(CultureInfo.InvariantCulture);
+            o["preview"] = previewImage.Image != null;
             return o;
+        }
+
+        static void SaveWindowShot(IntPtr hwnd, string path)
+        {
+            Rectangle b = Native.GetWindowBounds(hwnd); // visible frame, without the shadow
+            using (var bmp = new Bitmap(b.Width, b.Height))
+            {
+                using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(b.Location, Point.Empty, b.Size);
+                bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+            }
         }
     }
 }

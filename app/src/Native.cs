@@ -39,6 +39,14 @@ namespace ChainShot
             try { SetProcessDPIAware(); } catch (EntryPointNotFoundException) { }
         }
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr w, string l);
+
+        /// <summary>Grey hint text in an empty text box.</summary>
+        public static void SetCueBanner(Control box, string text)
+        {
+            SendMessage(box.Handle, 0x1501 /* EM_SETCUEBANNER */, new IntPtr(1), text);
+        }
+
         public const int WM_HOTKEY = 0x0312;
         public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xFFFF);
         public const uint MOD_ALT = 1, MOD_CONTROL = 2, MOD_SHIFT = 4, MOD_NOREPEAT = 0x4000;

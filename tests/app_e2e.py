@@ -331,16 +331,33 @@ def evidence_package():
 
 @test
 def demo_case_screenshot():
-    """A clean case for the README screenshot (docs/img/app-window.png)."""
+    """Clean cases for the README screenshots (docs/img/app-*.png)."""
+    import time
     d = OUT / "demo"
     run("new-case", d, "--case", "DEMO-01 Workstation PC-042", "--examiner", "Analyst")
     image = OUT / "PC-042.E01"
     image.write_bytes(b"ChainShot demo - not a real disk image\n" * 2000)
     run("add", image, "--copy", "--tag", "P00", "--note", "Disk image received from the client (demo file)")
     run("note", "Write blocker attached, acquisition hash checked against the chain of custody form", "--tag", "P01")
-    run("capture", "--mode", "screen", "--tag", "P02", "--note", "Desktop at the start of the analysis")
-    run("capture", "--rect", "0,0,480,300", "--tag", "P03", "--note", "Detail of the taskbar area")
-    run("note", "Timeline analysis started", "--tag", "P04")
+    run("capture", "--rect", "0,0,480,300", "--tag", "P02", "--note", "Desktop at the start of the analysis")
+    # A neutral web page in an Edge window, captured as a window like an examiner would.
+    edge = next((p for p in (Path(os.environ.get("ProgramFiles(x86)", "")) / "Microsoft/Edge/Application/msedge.exe",
+                             Path(os.environ.get("ProgramFiles", "")) / "Microsoft/Edge/Application/msedge.exe") if p.exists()), None)
+    browser = None
+    if edge:
+        page = (REPO / "docs" / "demo" / "activity.html").resolve().as_uri()
+        browser = subprocess.Popen([str(edge), f"--app={page}", "--window-size=900,560", "--window-position=60,60",
+                                    "--no-first-run", "--disable-features=msEdgeSidebarV2", f"--user-data-dir={OUT / 'edge-profile'}"])
+        time.sleep(6)
+    try:
+        code, out = run("capture", "--mode", "window" if edge else "screen", "--tag", "P03",
+                        "--note", "Sign-in history of the user account", ok=(0, 2))
+        if code != 0:
+            run("capture", "--mode", "screen", "--tag", "P03", "--note", "Sign-in history of the user account")
+    finally:
+        if browser:
+            browser.kill()
+    run("note", "New device and password change at 02:41 UTC: to be confirmed with the user", "--tag", "P04")
     if pytests.OPENSSL and TSA_URL:
         run("seal", d, "--tsa", TSA_URL)
     else:
@@ -349,10 +366,23 @@ def demo_case_screenshot():
     run("tag", "P05")
     _, out = run("tag")
     assert out.strip().endswith("P05"), out
+    shots = OUT / "shots"
     png = OUT / "app-demo.png"
-    code, out = run("--smoke-test", png, "--case", d, timeout=90)
+    code, out = run("--smoke-test", png, "--case", d, "--shots", shots, timeout=120)
     info = json.loads(out.strip().splitlines()[-1])
     assert "intact" in info["chip"], info  # the full verification finished and passed
+    assert info["preview"] is True, info
+    assert (shots / "app-new-case.png").exists() and (shots / "app-tray-menu.png").exists()
+    # The same case after a capture was edited: what the examiner (or the client) sees.
+    bad = OUT / "demo-altered"
+    shutil.copytree(d, bad)
+    shot = sorted((bad / "captures").glob("*_P03.png"))[0]
+    with open(shot, "r+b") as fh:  # change pixels, not just the size
+        fh.seek(200)
+        fh.write(b"\x00" * 64)
+    code, out = run("--smoke-test", OUT / "app-altered.png", "--case", bad, timeout=120)
+    info = json.loads(out.strip().splitlines()[-1])
+    assert "FAILED" in info["chip"] or "ALTERED" in info["chip"], info
 
 
 failed = [(n, tb) for n, tb in results if tb]
