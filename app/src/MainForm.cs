@@ -638,6 +638,7 @@ namespace ChainShot
                 row.Cells["evidence"].ToolTipText = evidence;
             }
             grid.ResumeLayout();
+            grid.ClearSelection();
             if ((scrollToEnd || atEnd) && grid.Rows.Count > 0) { try { grid.FirstDisplayedScrollingRowIndex = grid.Rows.Count - 1; } catch (InvalidOperationException) { } }
             UpdateInfo(quick.Entries.Count);
             if (!quick.Ok) SetChip("ALTERED - " + quick.ProblemCount + " problem(s)", Ui.Bad);
@@ -1007,8 +1008,14 @@ namespace ChainShot
         /// <summary>Used by CI: shows the window, saves a screenshot of it and returns a summary.</summary>
         public async Task<JsonObject> SmokeTest(string pngPath)
         {
+            // A tidy window for the README picture: fits the screen, no selection, no tooltip.
+            Rectangle wa = Screen.FromControl(this).WorkingArea;
+            WindowState = FormWindowState.Normal;
+            Bounds = new Rectangle(wa.X + 8, wa.Y + 8, Math.Min(1000, wa.Width - 16), Math.Min(640, wa.Height - 16));
+            Cursor.Position = new Point(wa.Right - 2, wa.Bottom - 2);
             await Task.Delay(1500);
             Activate();
+            grid.ClearSelection();
             await Task.Delay(500);
             Rectangle b = Bounds;
             using (var bmp = new Bitmap(b.Width, b.Height))

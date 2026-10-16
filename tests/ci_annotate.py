@@ -45,6 +45,15 @@ def thumbnail(png_path: str, title: str, mode: str = "strip", part: str = "1/1")
     else:
         candidates = [full.crop((0, max(0, full.height - 100), min(full.width, 1000), full.height))]
     b64 = ""
+    if mode == "full":
+        # Screenshots of windows compress best as PNG (flat colours): try it before JPEG.
+        for img in (full, full.quantize(256, method=Image.Quantize.MEDIANCUT)):
+            buf = io.BytesIO()
+            img.save(buf, "PNG", optimize=True)
+            b64 = base64.b64encode(buf.getvalue()).decode()
+            if len(b64) <= budget:
+                candidates = []
+                break
     for img in candidates:
         for quality in (85, 70, 55, 40, 25):
             buf = io.BytesIO()
@@ -56,7 +65,8 @@ def thumbnail(png_path: str, title: str, mode: str = "strip", part: str = "1/1")
             break
     chunks = [b64[i:i + 4000] for i in range(0, len(b64), 4000)][:9 * parts]
     if k == 1:
-        print(f"::notice title={esc(title)} size::{full.width}x{full.height}")
+        kind = "png" if b64.startswith("iVBOR") else "jpeg"
+        print(f"::notice title={esc(title)} size::{full.width}x{full.height} {kind}")
     for i in range((k - 1) * 9, min(k * 9, len(chunks))):
         print(f"::notice title={esc(title)} chunk {i + 1}/{len(chunks)}::{chunks[i]}")
 
