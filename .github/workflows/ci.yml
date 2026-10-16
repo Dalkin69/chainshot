@@ -25,7 +25,14 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Unit tests (includes a real RFC 3161 TSA built with OpenSSL)
-        run: python -m unittest discover -s python/tests -v
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest discover -s python/tests -v 2>&1 | tee python-tests.log
+      - name: Report failures as annotations
+        if: failure()
+        shell: bash
+        run: python tests/ci_annotate.py failures python-tests.log
       - name: Vectors are up to date
         if: runner.os == 'Linux'
         run: |
@@ -67,9 +74,23 @@ jobs:
           Import-Module Pester -MinimumVersion 5.5.0
           $cfg = New-PesterConfiguration
           $cfg.Run.Path = 'windows/tests'
-          $cfg.Run.Exit = $true
+          $cfg.Run.PassThru = $true
           $cfg.Output.Verbosity = 'Detailed'
-          Invoke-Pester -Configuration $cfg
+          $r = Invoke-Pester -Configuration $cfg
+          # Summary and failures as annotations (readable through the GitHub API).
+          $skipped = ($r.Tests | Where-Object Result -eq 'Skipped' | ForEach-Object Name) -join '; '
+          "::notice title=Pester $($PSVersionTable.PSVersion) on $([Environment]::OSVersion.VersionString)::passed=$($r.PassedCount) failed=$($r.FailedCount) skipped=$($r.SkippedCount) [$skipped]"
+          foreach ($t in ($r.Tests | Where-Object Result -eq 'Failed')) {
+            $msg = ($t.ErrorRecord | ForEach-Object { $_.Exception.Message + ' ' + $_.ScriptStackTrace }) -join ' | '
+            "::error title=$($t.ExpandedName)::$($msg -replace "`r?`n", '%0A')"
+          }
+          if ($r.FailedCount -gt 0) { exit 1 }
+      - name: Preview of a capture taken on the runner (annotation)
+        if: always() && runner.os == 'Windows'
+        run: |
+          python -m pip install --quiet pillow
+          $png = Get-ChildItem -Recurse -Filter *.png $env:CHAINSHOT_TEST_OUT | Where-Object { $_.Directory.Name -eq 'captures' } | Select-Object -First 1
+          if ($png) { python tests/ci_annotate.py thumbnail $png.FullName "Capture preview ${{ matrix.shell }}" }
       - name: Upload test cases (screenshots taken on the runner)
         if: always() && runner.os == 'Windows'
         uses: actions/upload-artifact@v4

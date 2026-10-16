@@ -506,7 +506,9 @@ def cmd_add(args) -> int:
         shutil.copy2(src, target)
     sha, md5, size = file_hashes(target)
     try:
-        stored = target.relative_to(case.root.resolve()).as_posix()
+        # Resolve both sides: temp folders differ once resolved (macOS /private/var,
+        # Windows 8.3 short names such as RUNNER~1).
+        stored = target.resolve().relative_to(case.root.resolve()).as_posix()
     except ValueError:
         stored = str(target)
     entry = case.append({"type": "file", "tag": args.tag, "file": stored, "size": str(size),
