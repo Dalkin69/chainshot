@@ -13,6 +13,9 @@ banner, hash files, write notes, verify, seal and produce the HTML report, from 
 
 ## Install
 
+Package managers: `winget install Dalkin69.ChainShot` (once accepted in the winget catalog) or
+`scoop bucket add chainshot https://github.com/Dalkin69/chainshot; scoop install chainshot`. By hand:
+
 1. Download `chainshot-app-<version>.zip` from the [releases](https://github.com/Dalkin69/chainshot/releases),
    check it against `SHA256SUMS.txt`, and extract it to a folder of your choice (for example
    `%LOCALAPPDATA%\Programs\ChainShot`).
@@ -93,6 +96,12 @@ Stored in `%APPDATA%\ChainShot`:
   Options > *Accept captures from the browser extension* adds or removes them).
 
 Deleting them resets the application; cases are never stored there.
+
+## Uninstall
+
+*Options > Uninstall from this computer* (or `ChainShot.exe uninstall`) removes the Start menu shortcut, start with
+Windows, the browser link and the settings; then delete `ChainShot.exe`. Case folders are never touched.
+Scoop runs the same command when you uninstall it.
 
 ## Build from source
 

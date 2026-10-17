@@ -24,6 +24,8 @@ Thank you for helping. Issues and pull requests are welcome, in English or Frenc
 python -m unittest discover -s python/tests -v
 pwsh -c "Invoke-Pester ./windows/tests"            # Pester 5 (4.10+ also works)
 npm install && npx playwright install chromium && npm run test:extension
+# Firefox (needs Firefox 140+, geckodriver, pip install selenium):
+python tools/build_extension.py --out dist && python tests/firefox_e2e.py dist/extension-firefox
 # Windows only:
 dotnet build app/ChainShot.csproj -c Release
 python tests/app_e2e.py app/bin/Release/ChainShot.exe
