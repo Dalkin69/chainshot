@@ -126,6 +126,22 @@ Describe 'ChainShot' {
             $LASTEXITCODE | Should -Be 0
         }
 
+        It 'exports an evidence package that verifies on its own' {
+            if (-not $script:Python) { Set-ItResult -Skipped -Because 'python not installed'; return }
+            $c = New-TestCase
+            Add-ChainShotNote -CasePath $c -Text 'to deliver' | Out-Null
+            $zip = Join-Path ([IO.Path]::GetTempPath()) ("cs-pkg-" + [guid]::NewGuid() + '.zip')
+            Export-ChainShotPackage -CasePath $c -Path $zip -Seal | Out-Null
+            Test-Path $zip | Should -BeTrue
+            $x = Join-Path ([IO.Path]::GetTempPath()) ("cs-pkg-x-" + [guid]::NewGuid())
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [IO.Compression.ZipFile]::ExtractToDirectory($zip, $x)
+            Test-Path (Join-Path $x 'VERIFY.txt') | Should -BeTrue
+            & $script:Python.Source (Join-Path $x 'chainshot.py') verify (Join-Path $x (Split-Path $c -Leaf)) | Out-Null
+            $LASTEXITCODE | Should -Be 0
+            (Read-ChainShotJournal -CasePath $c)[-1].tag | Should -BeExactly 'PACKAGE'
+        }
+
         It 'verifies a case written by chainshot.py' {
             if (-not $script:Python) { Set-ItResult -Skipped -Because 'python not installed'; return }
             $dir = Join-Path ([IO.Path]::GetTempPath()) ("cs-py-" + [guid]::NewGuid())

@@ -9,6 +9,11 @@
   Chaque capture est hachée, chaînée à la précédente, scellée et vérifiable par n'importe qui.
 </p>
 
+<p align="center">
+  <a href="PRIVACY.md"><img alt="Aucune télémétrie" src="https://img.shields.io/badge/t%C3%A9l%C3%A9m%C3%A9trie-aucune-1f7a4d"></a>
+  <img alt="Licence MIT" src="https://img.shields.io/badge/licence-MIT-blue.svg">
+</p>
+
 <p align="center"><a href="README.md">Read in English</a></p>
 
 ---
@@ -25,6 +30,12 @@ remplacée. ChainShot fait de chaque capture une preuve que n'importe qui peut c
 Le projet est né pendant un cours d'analyse forensic, d'un petit script PowerShell utilisé pour documenter une
 analyse Autopsy, puis il est devenu une boîte à outils.
 
+> **Confidentiel par conception, open source.** Aucune télémétrie, aucune statistique d'usage, aucun compte, aucune
+> vérification de mise à jour : ChainShot ne se connecte jamais à Internet de lui-même et vos captures ne quittent pas
+> votre ordinateur. La seule requête réseau est l'horodatage RFC 3161 optionnel, qui n'envoie que le SHA-256 d'un
+> fichier de scellé. Tout le code source est ici sous licence MIT, et chaque version est construite à partir de lui
+> par le workflow public GitHub Actions, avec ses sommes SHA-256. Détails : [PRIVACY.md](PRIVACY.md) (en anglais).
+
 ## Composants
 
 | Composant | Plateforme | Rôle |
@@ -38,11 +49,29 @@ Les quatre écrivent **le même format de journal** ([spécification, en anglais
 testés sur les mêmes vecteurs : un cas commencé dans l'application peut être poursuivi en PowerShell ou avec
 l'extension, et vérifié partout.
 
-<img src="docs/img/app-window.png" alt="ChainShot pour Windows : en-tête du cas avec le badge de vérification, champs tag et note, boutons de capture et journal du cas" width="820">
+## Captures d'écran
 
-| Capture web avec bandeau | Fenêtre de l'extension |
+**L'application** : le cas, son badge de vérification, le tag et la note de la prochaine capture, le journal avec
+son filtre, et l'aperçu de la capture sélectionnée avec son hash.
+
+<img src="docs/img/app-window.png" alt="ChainShot pour Windows : en-tête du cas, champs tag et note, boutons de capture, journal et aperçu d'une page web capturée dans une fenêtre Edge" width="860">
+
+**Un fichier modifié est détecté** : le même cas après la modification de quelques octets d'une capture. Le badge,
+la ligne et la barre d'état indiquent quelle preuve ne correspond plus à son SHA-256.
+
+<img src="docs/img/app-altered.png" alt="ChainShot affiche VERIFICATION FAILED et FILE HASH MISMATCH sur la capture modifiée" width="860">
+
+| Nouveau cas | Menu de l'icône (les raccourcis marchent depuis toute application) |
 | --- | --- |
-| <img src="docs/img/sample-capture.png" alt="Page web capturée par ChainShot, avec le bandeau de preuve en dessous" width="520"> | <img src="docs/img/extension-popup.png" alt="Fenêtre de l'extension ChainShot" width="300"> |
+| <img src="docs/img/app-new-case.png" alt="Boîte de dialogue New case : nom du cas, examinateur, dossier" width="440"> | <img src="docs/img/app-tray-menu.png" alt="Menu de l'icône : ouvrir, capturer, tag, note, vérifier, rapport" width="260"> |
+
+**L'extension navigateur**, dans son propre cas ou dans le cas ouvert dans l'application :
+
+| Capture web avec son bandeau | Fenêtre | Fenêtre liée à l'application |
+| --- | --- | --- |
+| <img src="docs/img/sample-capture-app.png" alt="Page web capturée par l'extension, avec le bandeau de preuve en dessous" width="430"> | <img src="docs/img/extension-popup.png" alt="Fenêtre de l'extension, cas dans Téléchargements" width="230"> | <img src="docs/img/extension-popup-app.png" alt="Fenêtre de l'extension enregistrant dans le cas de l'application" width="230"> |
+
+**Le rapport HTML**, lisible par tous, régénéré à partir du journal :
 
 <img src="docs/img/html-report.png" alt="Rapport HTML : bandeau de vérification, scellés, journal avec miniatures et hash" width="820">
 
@@ -79,7 +108,7 @@ l'extension, et vérifié partout.
 | `Ctrl+Alt+R` | zone : l'écran se fige, tracez un rectangle, `Échap` annule |
 
 4. Glissez des fichiers sur la fenêtre pour les hacher (export Autopsy, image disque), ajoutez des **notes**, puis
-   **Verify**, **Seal + timestamp** et ouvrez le **HTML report**.
+   **Verify**, **Seal + timestamp**, ouvrez le **HTML report** et, pour la remise, **Export package**.
 
 Fermer la fenêtre laisse ChainShot dans la zone de notification avec ses raccourcis. Le [guide de l'application](app/README.md)
 (en anglais) détaille les options et la ligne de commande (`ChainShot.exe verify`, `capture`, `seal --tsa`...).
@@ -111,8 +140,13 @@ Start-ChainShotTray                 # icône de notification avec les mêmes rac
 3. Cliquez sur l'icône ChainShot, créez un cas, puis capturez avec le bouton ou `Alt+Maj+S`.
 
 Le cas est écrit dans `Téléchargements/ChainShot/<cas>-<UTC>/`. Il contient les mêmes fichiers qu'un cas Windows et se
-vérifie de la même façon. L'extension ne demande que `activeTab`, `downloads` et `storage` : elle ne peut capturer un
-onglet que lorsque vous cliquez sur son bouton ou utilisez son raccourci.
+vérifie de la même façon. L'extension n'a aucune permission sur les sites : elle ne peut capturer un onglet que
+lorsque vous cliquez sur son bouton ou utilisez son raccourci, et elle n'envoie rien sur le réseau.
+
+**Dans le cas de l'application.** Dans la fenêtre de l'extension, choisissez **ChainShot app** : captures, notes et tag
+vont alors dans le cas ouvert dans ChainShot (Windows : l'application enregistre le lien à son démarrage ; Linux et
+macOS : `python3 chainshot.py register-browser` puis `chainshot.py use <cas>`). Captures web, captures d'écran, fichiers
+et notes se retrouvent dans un seul journal. Voir [docs/browser-link.md](docs/browser-link.md) (en anglais).
 
 > Si votre navigateur est réglé sur *« Toujours demander où enregistrer les fichiers »*, désactivez ce réglage
 > pendant l'utilisation de ChainShot, sinon chaque fichier ouvre une boîte d'enregistrement.
@@ -127,10 +161,28 @@ python chainshot.py verify ./cas
 python chainshot.py seal ./cas --tsa                 # horodatage RFC 3161 (par défaut : FreeTSA)
 python chainshot.py report ./cas                     # ./cas/report/index.html
 python chainshot.py export-csv ./cas                 # vue CSV en lecture seule
+python chainshot.py package ./cas --tsa              # archive de remise (voir ci-dessous)
 ```
 
 Installation comme commande : `pipx install "git+https://github.com/Dalkin69/chainshot#subdirectory=python"`,
 ou copiez simplement le fichier.
+
+## Remettre un cas : paquet de preuves
+
+**Export package** (application), `ChainShot.exe package`, `chainshot.py package` ou `Export-ChainShotPackage` produit
+une seule archive zip :
+
+```
+DEMO-01-package-20261017T091500Z.zip
+├── DEMO-01/              le dossier du cas : journal, captures, fichiers, scellés, rapport
+├── chainshot.py          le vérificateur indépendant (Python standard, sans dépendance)
+├── VERIFY.txt            quoi vérifier et comment, avec le SHA-256 du scellé et celui du journal
+└── SHA256SUMS.txt        SHA-256 de chaque fichier du paquet
+```
+
+Le cas doit être intègre pour être empaqueté ; l'application propose de le sceller d'abord (avec horodatage RFC 3161).
+Le nom du zip et son SHA-256 sont ensuite inscrits au journal : envoyez ce SHA-256 au destinataire par un autre canal, ou
+écrivez-le dans votre rapport.
 
 ## Vérifier un cas (client, auditeur)
 
@@ -181,7 +233,8 @@ après un scellé et, avec RFC 3161, que le scellé existait à une heure certif
 
 - que ce qui était à l'écran était vrai : ChainShot enregistre ce que vous avez vu, pas l'intégrité du système observé ;
 - l'heure d'une entrée à elle seule : elle vient de l'horloge de l'examinateur. Gardez-la synchronisée et utilisez des
-  scellés RFC 3161 pour ancrer le journal sur une heure externe ;
+  scellés RFC 3161 pour ancrer le journal sur une heure externe : chaque horodatage enregistre aussi l'écart entre
+  l'horloge locale et celle de l'autorité (`RFC 3161 time ... (local clock +0.4 s)`), avec une alerte au-delà d'une minute ;
 - quoi que ce soit si le hash du scellé n'est pas conservé hors du dossier : quelqu'un capable de réécrire tout le
   dossier peut fabriquer une nouvelle chaîne cohérente. Le SHA-256 du scellé doit figurer dans le rapport signé, ou
   être envoyé au client lors de la remise.
@@ -196,10 +249,10 @@ Chaque envoi déclenche l'ensemble des tests sur GitHub Actions ([workflow](.git
 
 | Suite | Environnements | Couvre |
 | --- | --- | --- |
-| Application, bout en bout | Windows (vrai bureau) | `ChainShot.exe` compilé depuis les sources : vecteurs, **vraies captures avec bandeau**, cas vérifiés par `chainshot.py` et le module dans les deux sens, réglages partagés, altérations, **RFC 3161** avec une autorité OpenSSL, rapport HTML, la fenêtre elle-même |
-| Python `unittest` | Linux, Windows, macOS ; Python 3.9 et 3.13 | journal, scénarios d'altération, scellés, format v0, rapport, **RFC 3161 avec une vraie autorité d'horodatage OpenSSL** |
+| Application, bout en bout | Windows (vrai bureau) | `ChainShot.exe` compilé depuis les sources : vecteurs, **vraies captures avec bandeau**, cas vérifiés par `chainshot.py` et le module dans les deux sens, réglages partagés, altérations, **RFC 3161** avec une autorité OpenSSL, lien navigateur (protocole et enregistrement), paquet de preuves vérifié par son propre `chainshot.py`, rapport HTML, la fenêtre elle-même (les captures ci-dessus en viennent) |
+| Python `unittest` | Linux, Windows, macOS ; Python 3.9 et 3.13 | journal, scénarios d'altération, scellés, format v0, rapport, **RFC 3161 avec une vraie autorité d'horodatage OpenSSL**, écart d'horloge, hôte du lien navigateur, paquets de preuves |
 | Pester | Windows PowerShell 5.1, PowerShell 7 sous Windows et Linux | journal, altérations, scellés, **vraies captures écran, fenêtre et rectangle**, **application de notification et raccourcis**, interopérabilité avec Python dans les deux sens |
-| Playwright | Chromium | extension chargée dans un vrai navigateur : capture, fichiers écrits par l'API de téléchargement, vérification par `chainshot.py`, détection d'altération, fenêtre |
+| Playwright | Chromium | extension chargée dans un vrai navigateur : capture, fichiers écrits par l'API de téléchargement, vérification par `chainshot.py`, détection d'altération, fenêtre, **lien navigateur** avec `chainshot.py` comme hôte de messagerie native |
 | Vecteurs partagés | les quatre | `tests/vectors/canonical-vectors.json` : texte canonique, hash d'entrée et chaîne identiques |
 
 ## Réalisé avec l'IA

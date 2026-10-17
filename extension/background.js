@@ -7,6 +7,10 @@
 // which is a regular ChainShot case: `python chainshot.py verify <folder>` checks it.
 // The journal of record is kept in chrome.storage.local and rewritten to disk
 // after every entry (downloads API, conflictAction "overwrite").
+//
+// Destination "app": captures go instead into the case open in ChainShot.exe (or the one
+// selected with `chainshot.py use`), through Chrome native messaging. The banner is drawn
+// here; the app hashes, names and chains the file. Protocol: docs/browser-link.md.
 
 import {
   FORMAT_VERSION, GENESIS, CHAINED_FIELDS, sanitize, nextChain, sha256Hex,
@@ -20,7 +24,7 @@ const ENTRY_TYPES = ['screenshot', 'browser', 'file', 'note', 'seal', 'timestamp
 // ---------------------------------------------------------------- state ---
 async function loadState() {
   const { settings = {}, cases = {} } = await chrome.storage.local.get(['settings', 'cases']);
-  return { settings: { tag: '', nextNote: '', activeFolder: '', ...settings }, cases };
+  return { settings: { tag: '', nextNote: '', activeFolder: '', destination: 'downloads', ...settings }, cases };
 }
 
 async function saveState(state) {
@@ -159,25 +163,90 @@ async function addBanner(pngDataUrl, lines) {
   return { bytes: new Uint8Array(await blob.arrayBuffer()), width: shot.width, height: shot.height };
 }
 
+// ------------------------------------------------- link with the ChainShot app ---
+const HOST = 'com.chainshot.host';
+
+async function hostCall(message) {
+  let reply;
+  try {
+    reply = await chrome.runtime.sendNativeMessage(HOST, { protocol: 1, ...message });
+  } catch (err) {
+    throw new Error('ChainShot app not reachable. Start ChainShot.exe once (Windows) or run '
+      + '"chainshot.py register-browser", then try again. Details: ' + (err?.message || err));
+  }
+  if (!reply) throw new Error('No answer from the ChainShot app.');
+  return reply;
+}
+
+async function appStatus() {
+  try {
+    const r = await hostCall({ type: 'hello' });
+    return { connected: true, tool: r.tool, host: r.host, tag: r.tag || '', case: r.case, warning: r.warning || '' };
+  } catch (err) {
+    return { connected: false, error: String(err?.message || err) };
+  }
+}
+
+function bannerLines({ seq, shotNo, caseName, tag, now, examiner, host, tab, text }) {
+  const stamp = now.toISOString().replace('T', ' ').slice(0, 19);
+  const lines = [
+    `#${seq} (capture ${shotNo}) | ${caseName} | ${tag} | ${stamp} UTC | ${examiner}${host ? ` @ ${host}` : ''}`,
+    `URL: ${tab.url || ''}`,
+    `Title: ${tab.title || ''}`,
+  ];
+  if (text) lines.push(`Note: ${text}`);
+  return lines;
+}
+
+async function captureToApp(state, tab, dataUrl, now, text) {
+  let info = await hostCall({ type: 'hello' });
+  if (!info.case) throw new Error(info.warning || 'No case is open in ChainShot.');
+  const tag = info.tag || ''; // the tag of the ChainShot app, shared with its window and the module
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = info.case;
+    const lines = bannerLines({
+      seq: Number(c.next_seq), shotNo: Number(c.next_capture), caseName: c.name, tag, now,
+      examiner: c.examiner, host: info.host, tab, text,
+    });
+    const { bytes, width, height } = await addBanner(dataUrl, lines);
+    const reply = await hostCall({
+      type: 'capture', png_base64: bytesToBase64(bytes), utc: formatUtc(now), expected_seq: Number(c.next_seq),
+      url: tab.url || '', title: tab.title || '', tag, note: text, source: SOURCE,
+      extra: { viewport: `${width}x${height}`, user_agent: navigator.userAgent },
+    });
+    if (reply.ok) {
+      return { ...reply.entry, type: 'browser', tag, url: tab.url || '', title: tab.title || '', note: sanitize(text),
+        extra: { viewport: `${width}x${height}` }, destination: 'app', case: c.name };
+    }
+    if (!reply.retry) throw new Error(reply.error || 'The ChainShot app refused the capture.');
+    info = reply; // another tool added an entry meanwhile: redraw the banner with the new number
+  }
+  throw new Error('The journal keeps changing; capture again.');
+}
+
 async function captureTab({ note } = {}) {
   return serial(async () => {
     const state = await loadState();
+    if (state.settings.destination === 'app') {
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      if (!tab) throw new Error('No active tab.');
+      const now = new Date();
+      const dataUrl = await captureVisible(tab.windowId);
+      const entry = await captureToApp(state, tab, dataUrl, now, (note ?? state.settings.nextNote) || '');
+      if (state.settings.nextNote) { state.settings.nextNote = ''; await saveState(state); }
+      flashBadge('OK', '#1f7a4d');
+      return entry;
+    }
     const c = activeCase(state);
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     if (!tab) throw new Error('No active tab.');
     const now = new Date();
-    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+    const dataUrl = await captureVisible(tab.windowId);
     const tag = state.settings.tag || '';
     const text = (note ?? state.settings.nextNote) || '';
     const seq = c.entries.length + 1; // journal entry number (entry 1 is the case creation note)
     const shotNo = c.entries.filter((e) => e.type === 'screenshot' || e.type === 'browser').length + 1;
-    const stamp = now.toISOString().replace('T', ' ').slice(0, 19);
-    const lines = [
-      `#${seq} (capture ${shotNo}) | ${c.meta.case} | ${tag} | ${stamp} UTC | ${c.meta.examiner}`,
-      `URL: ${tab.url || ''}`,
-      `Title: ${tab.title || ''}`,
-    ];
-    if (text) lines.push(`Note: ${text}`);
+    const lines = bannerLines({ seq, shotNo, caseName: c.meta.case, tag, now, examiner: c.meta.examiner, host: '', tab, text });
     const { bytes, width, height } = await addBanner(dataUrl, lines);
     const sha256 = await sha256Hex(bytes);
     const safeTag = tag.replace(/[^\w-]/g, '_') || 'untagged';
@@ -193,6 +262,18 @@ async function captureTab({ note } = {}) {
   }).catch((err) => { flashBadge('ERR', '#b3261e'); throw err; });
 }
 
+/** Chrome allows two captures per second: wait and retry instead of failing. */
+async function captureVisible(windowId) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+    } catch (err) {
+      if (attempt >= 4 || !/MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND/.test(String(err?.message || err))) throw err;
+      await new Promise((r) => setTimeout(r, 600));
+    }
+  }
+}
+
 function flashBadge(text, color) {
   chrome.action.setBadgeBackgroundColor({ color });
   chrome.action.setBadgeText({ text });
@@ -204,8 +285,11 @@ async function status() {
   const state = await loadState();
   const c = state.cases[state.settings.activeFolder];
   const last = c?.entries[c.entries.length - 1];
+  const app = state.settings.destination === 'app' ? await appStatus() : null;
+  if (app?.connected) state.settings.tag = app.tag; // the app owns the tag in this mode
   return {
     version: VERSION,
+    app,
     settings: state.settings,
     case: c ? { ...c.meta, folder: state.settings.activeFolder, entries: c.entries.length } : null,
     last: last ? { seq: last.seq, type: last.type, file: last.file, sha256: last.sha256, utc: last.utc } : null,
@@ -228,16 +312,31 @@ const handlers = {
   addNote: (m) => serial(async () => {
     if (!m.text?.trim()) throw new Error('Empty note.');
     const state = await loadState();
+    if (state.settings.destination === 'app') {
+      const r = await hostCall({ type: 'note', text: m.text, source: SOURCE }); // the app applies its tag
+      if (!r.ok) throw new Error(r.error);
+      return { ...r.entry, type: 'note', destination: 'app' };
+    }
     return appendEntry(state, { type: 'note', tag: state.settings.tag, note: m.text });
   }),
   setSettings: async (m) => {
     const state = await loadState();
     for (const k of ['tag', 'nextNote']) if (k in m) state.settings[k] = String(m[k]);
+    if (m.destination === 'app' || m.destination === 'downloads') state.settings.destination = m.destination;
     if (m.activeFolder && state.cases[m.activeFolder]) state.settings.activeFolder = m.activeFolder;
     await saveState(state);
+    if ('tag' in m && state.settings.destination === 'app') {
+      await hostCall({ type: 'set_tag', tag: state.settings.tag }).catch(() => {});
+    }
     return status();
   },
-  verify: () => verify(),
+  verify: async () => {
+    const state = await loadState();
+    if (state.settings.destination !== 'app') return verify();
+    const r = await hostCall({ type: 'verify' });
+    if (!r.ok) throw new Error(r.error);
+    return { ok: r.intact, count: Number(r.entries), problems: r.problems || [], destination: 'app' };
+  },
   rewriteJournal: () => serial(async () => {
     const state = await loadState();
     await writeJournal(state.settings.activeFolder, activeCase(state).entries);

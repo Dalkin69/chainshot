@@ -16,6 +16,7 @@
   <img alt="Windows PowerShell 5.1 and 7" src="https://img.shields.io/badge/PowerShell-5.1%20%7C%207-2b4c7e">
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-2b4c7e">
   <img alt="Chrome / Edge" src="https://img.shields.io/badge/browser-Chrome%20%7C%20Edge%20%7C%20Brave-2b4c7e">
+  <a href="PRIVACY.md"><img alt="No telemetry" src="https://img.shields.io/badge/telemetry-none-1f7a4d"></a>
   <a href="#built-with-ai"><img alt="Built with AI" src="https://img.shields.io/badge/built%20with-AI%20(Claude)-c99a06"></a>
 </p>
 
@@ -35,11 +36,19 @@ swapped. ChainShot turns each capture into a piece of evidence that anyone can c
 It was born during a digital forensics course, as a small PowerShell script used to document
 an Autopsy analysis, and grew into a toolkit.
 
+> **Private by design, open source.** No telemetry, no analytics, no account, no update check: ChainShot never
+> connects to the internet on its own, and your captures never leave your computer. The only network request is
+> the optional RFC 3161 timestamp, which sends the SHA-256 of a seal file and nothing else. The whole source is
+> here under the MIT license, and every release is built from it by the public GitHub Actions workflow, with
+> SHA-256 checksums. Details: [PRIVACY.md](PRIVACY.md).
+
 ## Contents
 
 - [Components](#components)
+- [Screenshots](#screenshots)
 - [How it works](#how-it-works)
 - [Quick start](#quick-start)
+- [Delivering a case: evidence package](#delivering-a-case-evidence-package)
 - [Verifying a case (client, auditor)](#verifying-a-case-client-auditor)
 - [Case folder](#case-folder)
 - [Reference](#reference)
@@ -52,20 +61,38 @@ an Autopsy analysis, and grew into a toolkit.
 
 | Component | Platform | What it does |
 | --- | --- | --- |
-| [**ChainShot app**](app/) (`ChainShot.exe`) | Windows 10/11, single file, nothing to install | The main Windows tool: create cases, screen/window/region captures with global hotkeys, tags, notes, drag-and-drop file hashing, verification, seals with RFC 3161, HTML report, tray icon; command line included |
+| [**ChainShot app**](app/) (`ChainShot.exe`) | Windows 10/11, single file, nothing to install | The main Windows tool: create cases, screen/window/region captures with global hotkeys, tags, notes, drag-and-drop file hashing, journal with filter and preview, verification, seals with RFC 3161, HTML report, evidence package, tray icon; command line included |
 | [**PowerShell module**](windows/) | Windows PowerShell 5.1 or 7 | The same features from PowerShell, for scripts and command-line users, with its own tray app |
-| [**Browser extension**](extension/) | Chrome, Edge, Brave (Chromium 116+) | Captures the visible tab with its URL and title, writes a ChainShot case into your Downloads folder |
+| [**Browser extension**](extension/) | Chrome, Edge, Brave (Chromium 116+) | Captures the visible tab with its URL and title, into a case in your Downloads folder or [straight into the case open in the app](docs/browser-link.md) |
 | [**`chainshot.py`**](python/) | Any OS, Python 3.9+, no dependency | Reference implementation: verify, seal with RFC 3161, HTML report, CSV export, add files and notes |
 
 All four write the **same journal format** ([specification](docs/journal-format.md)) and are tested
 against the same vectors, so a case started in the app can be continued from PowerShell or the extension
 and verified anywhere.
 
-<img src="docs/img/app-window.png" alt="ChainShot for Windows: case header with the verification badge, tag and note fields, capture buttons and the journal of the case" width="820">
+## Screenshots
 
-| Web capture with banner | Extension popup |
+**The app**: the case, its verification badge, the tag and note of the next capture, the journal with a filter,
+and the preview of the selected capture with its hash.
+
+<img src="docs/img/app-window.png" alt="ChainShot for Windows: case header with the verification badge, tag and note fields, capture buttons, journal and preview of a web page captured in an Edge window" width="860">
+
+**A modified file is caught**: the same case after one byte range of a capture was changed. The badge, the row
+and the status bar say which evidence no longer matches its SHA-256.
+
+<img src="docs/img/app-altered.png" alt="ChainShot showing VERIFICATION FAILED and FILE HASH MISMATCH on the modified capture" width="860">
+
+| New case | Tray menu (hotkeys work from any application) |
 | --- | --- |
-| <img src="docs/img/sample-capture.png" alt="A web page captured by ChainShot, with the evidence banner below it" width="520"> | <img src="docs/img/extension-popup.png" alt="ChainShot extension popup" width="300"> |
+| <img src="docs/img/app-new-case.png" alt="New case dialog: case name, examiner, folder" width="440"> | <img src="docs/img/app-tray-menu.png" alt="Tray menu: open, capture screen, last window or region, tag, note, verify, report" width="260"> |
+
+**The browser extension**, saving into its own case or into the case open in the app:
+
+| Web capture with its banner | Popup | Popup, linked to the app |
+| --- | --- | --- |
+| <img src="docs/img/sample-capture-app.png" alt="A web page captured by the extension, with the evidence banner below it" width="430"> | <img src="docs/img/extension-popup.png" alt="Extension popup, cases in the Downloads folder" width="230"> | <img src="docs/img/extension-popup-app.png" alt="Extension popup saving into the ChainShot app case" width="230"> |
+
+**The HTML report**, readable by anyone, regenerated from the journal:
 
 <img src="docs/img/html-report.png" alt="HTML report generated by chainshot.py: verification banner, seals, journal with thumbnails and hashes" width="820">
 
@@ -111,7 +138,7 @@ flowchart LR
 | `Ctrl+Alt+R` | region: the screen freezes, draw a rectangle, `Esc` cancels |
 
 4. Drop files on the window to hash them (an export from Autopsy, a disk image), add **notes**, then **Verify**,
-   **Seal + timestamp** and open the **HTML report**.
+   **Seal + timestamp**, open the **HTML report** and, to deliver, **Export package**.
 
 Closing the window keeps ChainShot in the notification area with its hotkeys. The [app guide](app/README.md)
 covers the options and the command line (`ChainShot.exe verify`, `capture`, `seal --tsa`...).
@@ -142,8 +169,13 @@ Start-ChainShotTray                 # tray icon with the same hotkeys (do not ru
 3. Click the ChainShot icon, create a case, then capture with the button or `Alt+Shift+S`.
 
 The case is written to `Downloads/ChainShot/<case>-<UTC>/`. It contains the same files as a Windows case and is verified
-the same way. The extension only asks for `activeTab`, `downloads` and `storage`: it can capture a tab only when you click
-its button or press its shortcut.
+the same way. The extension has no host permission: it can capture a tab only when you click its button or press its
+shortcut, and it sends nothing over the network.
+
+**Into the app's case.** In the popup, choose **ChainShot app**: captures, notes and the tag then go into the case open in
+ChainShot (Windows: the app registers the link when it starts; Linux and macOS: `python3 chainshot.py register-browser`
+and `chainshot.py use <case>`). Web captures, screen captures, files and notes end up in one journal. See
+[docs/browser-link.md](docs/browser-link.md).
 
 > If your browser is set to *"Ask where to save each file"*, turn it off while using ChainShot, otherwise every file
 > opens a save dialog.
@@ -158,10 +190,26 @@ python chainshot.py verify ./case
 python chainshot.py seal ./case --tsa                 # RFC 3161 timestamp (default TSA: FreeTSA)
 python chainshot.py report ./case                     # ./case/report/index.html
 python chainshot.py export-csv ./case                 # read-only CSV view
+python chainshot.py package ./case --tsa              # zip for delivery (see below)
 ```
 
 Install it as a command with `pipx install "git+https://github.com/Dalkin69/chainshot#subdirectory=python"`,
 or just copy the single file.
+
+## Delivering a case: evidence package
+
+**Export package** (app), `ChainShot.exe package`, `chainshot.py package` or `Export-ChainShotPackage` builds one zip:
+
+```
+DEMO-01-package-20261017T091500Z.zip
+├── DEMO-01/              the case folder: journal, captures, files, seals, report
+├── chainshot.py          the independent verifier (standard Python, no dependency)
+├── VERIFY.txt            what to check and how, with the seal SHA-256 and the journal SHA-256
+└── SHA256SUMS.txt        SHA-256 of every file of the package
+```
+
+The case must verify to be packaged; the app offers to seal it first (with an RFC 3161 timestamp). The zip name and its
+SHA-256 are then recorded in the journal: send that SHA-256 to the recipient by another channel, or write it in your report.
 
 ## Verifying a case (client, auditor)
 
@@ -215,6 +263,9 @@ Do **not** open `journal.jsonl` in Excel and save it: that rewrites the file. Us
 | `verify [<case>] [--json]` | verify; exit code 0 = intact, 1 = problem, 2 = error |
 | `seal [<case>] [--tsa [URL]]` | seal, optionally with an RFC 3161 timestamp |
 | `report [<case>] [--out FILE] [--open]` | HTML report |
+| `use [<case>]` | show or set the current case (shared with the module and `chainshot.py`) |
+| `package [<case>] [--out FILE.zip] [--seal] [--tsa [URL]]` | evidence package for delivery |
+| `register-browser [--extension-id ID] [--remove]` | browser link for the extension (also done by the app at startup) |
 | `selftest <vectors.json>` | check the implementation against the shared vectors |
 
 Commands use the current case unless `--case <folder>` is given. From PowerShell, add `| Out-Host` so the prompt
@@ -237,6 +288,7 @@ waits for the result.
 | `Test-ChainShotCase [-Quiet]` | verify files, chain and seals |
 | `New-ChainShotSeal` | seal the journal |
 | `Export-ChainShotReport [-Open]` | HTML report (calls `chainshot.py`) |
+| `Export-ChainShotPackage [-Path] [-Seal] [-Timestamp] [-TsaUrl]` | evidence package (calls `chainshot.py`) |
 | `Start-ChainShotTray` | tray application and hotkeys |
 | `Install-ChainShotShortcut [-Startup]` | Start menu / Startup shortcuts for the PowerShell tray |
 
@@ -256,6 +308,9 @@ Every command takes `-CasePath` to work on a case other than the current one.
 | `report <case> [-o FILE] [--tsa-ca PEM]` | HTML report |
 | `export-csv <case> [-o FILE]` | CSV view of the journal |
 | `tsr-info <file.tsr>` | show the content of a timestamp |
+| `package <case> [-o FILE.zip] [--seal] [--tsa [URL]]` | evidence package: case + `chainshot.py` + `VERIFY.txt` + `SHA256SUMS.txt` |
+| `use [<case>]`, `tag [TAG]` | show or set the current case and tag (`state.json`, shared with the app and the module) |
+| `register-browser [--dir DIR] [--extension-id ID] [--remove]` | let the extension save into the current case (`chainshot.py` as native messaging host) |
 
 `verify` also checks journals produced by the original `Capture-Preuve.ps1` script (`journal_preuves.csv`, format v0).
 </details>
@@ -281,7 +336,8 @@ and, with RFC 3161, that the seal existed at a time certified by a third party.
 
 - that what was on screen was true: ChainShot records what you saw, not the integrity of the system you looked at;
 - the time of an entry by itself: entry times come from the examiner's clock. Keep it synchronised, and use RFC 3161
-  seals to anchor the journal to an external time;
+  seals to anchor the journal to an external time: each timestamp also records how far the local clock was from the
+  authority's (`RFC 3161 time ... (local clock +0.4 s)`), and ChainShot warns beyond one minute;
 - anything if the seal hash is not kept outside the folder: someone able to rewrite the whole folder can build a new
   consistent chain. The seal SHA-256 must be in your signed report, or sent to the client when you deliver.
 
@@ -294,10 +350,10 @@ Every push runs the full test suite on GitHub Actions ([workflow](.github/workfl
 
 | Suite | Runs on | Covers |
 | --- | --- | --- |
-| App end-to-end | Windows (real desktop) | `ChainShot.exe` built from source: vectors, **real captures with the banner**, cases verified by `chainshot.py` and the module in both directions, shared settings, tampering, **RFC 3161** against an OpenSSL authority, HTML report, the window itself |
-| Python `unittest` | Linux, Windows, macOS; Python 3.9 and 3.13 | journal, tampering scenarios, seals, legacy v0, report, **RFC 3161 with a real OpenSSL timestamp authority** |
+| App end-to-end | Windows (real desktop) | `ChainShot.exe` built from source: vectors, **real captures with the banner** (screen, rectangle, an Edge window), cases verified by `chainshot.py` and the module in both directions, shared settings, tampering, **RFC 3161** against an OpenSSL authority, browser link protocol and registration, evidence package verified by its own `chainshot.py`, HTML report, the window itself (the screenshots above come from it) |
+| Python `unittest` | Linux, Windows, macOS; Python 3.9 and 3.13 | journal, tampering scenarios, seals, legacy v0, report, **RFC 3161 with a real OpenSSL timestamp authority**, clock offset, browser link host, evidence packages |
 | Pester | Windows PowerShell 5.1, PowerShell 7 on Windows and Linux | journal, tampering, seals, **real screen/window/rectangle captures**, **tray app and hotkey registration**, interoperability with Python in both directions |
-| Playwright | Chromium | extension loaded in a real browser: capture, files written by the downloads API, verification by `chainshot.py`, tamper detection, popup |
+| Playwright | Chromium | extension loaded in a real browser: capture, files written by the downloads API, verification by `chainshot.py`, tamper detection, popup, **browser link** with `chainshot.py` as native messaging host |
 | Shared vectors | all four | `tests/vectors/canonical-vectors.json`: identical canonical text, entry hashes and chain values |
 
 Run them locally:

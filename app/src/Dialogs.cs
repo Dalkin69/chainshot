@@ -114,6 +114,13 @@ namespace ChainShot
             UpdatePreview();
         }
 
+        /// <summary>Fills the dialog for the documentation screenshot.</summary>
+        public void SetSample(string caseName)
+        {
+            caseBox.Text = caseName;
+            caseBox.SelectionStart = caseName.Length;
+        }
+
         public static string Slug(string name)
         {
             string s = Regex.Replace(name.Trim(), @"[^\w\-]+", "-").Trim('-');

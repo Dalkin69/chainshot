@@ -2,6 +2,34 @@
 
 All notable changes are listed here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-10-18
+
+### Added
+- **Browser link**: in the extension popup, choose *ChainShot app* to save web captures, notes and the
+  tag into the case open in ChainShot, in the same journal as the screen captures and files. Uses Chrome
+  native messaging (local only); `ChainShot.exe` and `chainshot.py native-host` implement the same
+  protocol ([docs/browser-link.md](docs/browser-link.md)). The app registers the link at startup
+  (Options > *Accept captures from the browser extension*); elsewhere `chainshot.py register-browser`.
+- **Evidence package** for delivery: one zip with the case, `chainshot.py`, `VERIFY.txt` (instructions,
+  seal and journal SHA-256) and `SHA256SUMS.txt`; recorded in the journal. App menu and button,
+  `ChainShot.exe package`, `chainshot.py package`, `Export-ChainShotPackage`.
+- RFC 3161 seals record the **local clock offset** against the time-stamp authority, with a warning beyond
+  one minute.
+- App: **filter** for the journal (`Ctrl+L`) and a **preview pane** with the selected capture and its
+  details (`F3`); the app follows case and tag changes made by the module or the extension.
+- `chainshot.py use` and `tag` (current case and tag shared with the app and the module) and
+  `ChainShot.exe use`.
+- [PRIVACY.md](PRIVACY.md): no telemetry, the only network request, what is stored where; also the
+  privacy policy of the extension in stores. Guide and images for publishing the extension
+  ([docs/publishing-extension.md](docs/publishing-extension.md), `docs/store/`), and a store package
+  `chainshot-extension-store-<version>.zip` in each release.
+
+### Changed
+- The extension manifest has a `key` (fixed ID for the browser link) and the `nativeMessaging` permission.
+- The extension waits and retries when Chrome's limit of two captures per second is reached.
+- `chainshot.py` uses the same journal lock as the app and the module.
+- README: screenshots of the app (taken by the CI on Windows), privacy section.
+
 ## [1.1.0] - 2026-10-17
 
 ### Added

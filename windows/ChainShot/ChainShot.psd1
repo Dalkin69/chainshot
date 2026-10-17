@@ -1,6 +1,6 @@
 @{
     RootModule           = 'ChainShot.psm1'
-    ModuleVersion        = '1.1.0'
+    ModuleVersion        = '1.2.0'
     GUID                 = '7d3c1f0e-5b8a-4f62-9a51-2c4e8b6f0d13'
     Author               = 'Dalkin69'
     Copyright            = '(c) 2026 Dalkin69. MIT License.'
@@ -10,7 +10,7 @@
     FunctionsToExport    = @(
         'New-ChainShotCase', 'Set-ChainShotCase', 'Set-ChainShotTag', 'Get-ChainShotStatus',
         'Invoke-ChainShot', 'Add-ChainShotFile', 'Add-ChainShotNote', 'Read-ChainShotJournal',
-        'Test-ChainShotCase', 'New-ChainShotSeal', 'Export-ChainShotReport',
+        'Test-ChainShotCase', 'New-ChainShotSeal', 'Export-ChainShotReport', 'Export-ChainShotPackage',
         'Start-ChainShotTray', 'Install-ChainShotShortcut',
         'Get-ChainShotCanonicalString', 'Get-ChainShotEntryHash', 'Get-ChainShotNextChain'
     )
