@@ -1,0 +1,26 @@
+{
+    "version": "1.3.0",
+    "description": "Timestamped, hash-chained forensic screenshots and evidence journal.",
+    "homepage": "https://github.com/Dalkin69/chainshot",
+    "license": "MIT",
+    "notes": "Case folders are yours: 'scoop uninstall chainshot' never touches them.",
+    "url": "https://github.com/Dalkin69/chainshot/releases/download/v1.3.0/chainshot-app-v1.3.0.zip",
+    "hash": "1c03746e7802f981bde3cff905d04243c36a896495d9d564379fdd01ebc4f77e",
+    "bin": [
+        [
+            "ChainShot.exe",
+            "chainshot"
+        ]
+    ],
+    "shortcuts": [
+        [
+            "ChainShot.exe",
+            "ChainShot"
+        ]
+    ],
+    "pre_uninstall": "if ($cmd -eq 'uninstall') { & \"$dir\\ChainShot.exe\" uninstall --keep-settings | Out-Null }",
+    "checkver": "github",
+    "autoupdate": {
+        "url": "https://github.com/Dalkin69/chainshot/releases/download/v$version/chainshot-app-v$version.zip"
+    }
+}
