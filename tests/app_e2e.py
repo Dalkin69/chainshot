@@ -311,6 +311,7 @@ def browser_link_registration():
         m = json.loads(manifest.read_text(encoding="utf-8"))
         assert Path(m["path"]) == EXE, m
         assert "chrome-extension://dcccfnbiglhpbcdhbmokfilfgpfnmikf/" in m["allowed_origins"], m
+        assert "chrome-extension://ejbdnnlgcnogepeclpknfagfhehkhgap/" in m["allowed_origins"], "Chrome Web Store ID"
         assert "chrome-extension://abcdefghijklmnopabcdefghijklmnop/" in m["allowed_origins"], m
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Mozilla\NativeMessagingHosts\com.chainshot.host") as k:
             ff = json.loads(Path(winreg.QueryValueEx(k, "")[0]).read_text(encoding="utf-8"))

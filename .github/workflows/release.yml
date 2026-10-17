@@ -92,7 +92,7 @@ jobs:
           path: packaging/winget/manifests
 
   # Submits the new version to microsoft/winget-pkgs when a WINGET_TOKEN secret exists
-  # (classic token with public_repo scope; see docs/distribution.md).
+  # (classic token with public_repo scope).
   winget:
     needs: package-managers
     runs-on: windows-latest
@@ -101,7 +101,7 @@ jobs:
     steps:
       - name: No token configured
         if: env.WINGET_TOKEN == ''
-        run: echo "::notice::WINGET_TOKEN secret not set; submit packaging/winget manifests by hand (docs/distribution.md)."
+        run: echo "::notice::WINGET_TOKEN secret not set; submit packaging/winget manifests by hand."
       - uses: actions/download-artifact@v4
         if: env.WINGET_TOKEN != ''
         with:

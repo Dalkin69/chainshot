@@ -2,7 +2,7 @@
 // Builds the browser store images (Chrome Web Store, Edge Add-ons) from the README
 // illustrations in docs/img: three 1280x800 screenshots and the 440x280 promo tile.
 //
-//   node docs/make-store-assets.mjs        (run docs/make-screenshots.mjs first)
+//   node docs/make-store-assets.mjs        (run docs/make-screenshots.mjs first; writes dist/store/)
 
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const IMG = path.join(ROOT, 'docs', 'img');
-const OUT = path.join(ROOT, 'docs', 'store');
+const OUT = path.join(ROOT, 'dist', 'store'); // not versioned: uploaded to the stores by the maintainer
 fs.mkdirSync(OUT, { recursive: true });
 
 const img = (name) => `data:image/png;base64,${fs.readFileSync(path.join(IMG, name)).toString('base64')}`;
