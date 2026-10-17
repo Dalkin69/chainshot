@@ -61,8 +61,11 @@ namespace ChainShot
         readonly Timer reloadTimer = new Timer { Interval = 400 };
         public readonly List<string> HotkeyFailures = new List<string>();
 
-        public MainForm(bool startHidden)
+        readonly bool unattended; // CI smoke test: no question, no system change
+
+        public MainForm(bool startHidden, bool unattended = false)
         {
+            this.unattended = unattended;
             this.startHidden = startHidden;
             Text = "ChainShot";
             Icon = Ui.AppIcon;
@@ -179,6 +182,9 @@ namespace ChainShot
                 catch (Exception ex) { Ui.Error(this, "Browser link: " + ex.Message); }
             };
             opt.DropDownItems.Add(link);
+            opt.DropDownItems.Add(new ToolStripSeparator());
+            opt.DropDownItems.Add(Item("&Uninstall from this computer...", (s, e) => UninstallFromGui()));
+            Shown += (s, e) => AskBrowserLinkOnce(link);
 
             var help = new ToolStripMenuItem("&Help");
             help.DropDownItems.Add(Item("&Documentation", (s, e) => OpenUrl(AppInfo.RepoUrl + "#readme")));
@@ -464,7 +470,7 @@ namespace ChainShot
             foregroundTimer.Tick += (sender, args) => TrackForeground();
             foregroundTimer.Start();
             // Keep the browser link pointing at this executable (it may have been moved).
-            if (settings.BrowserLink && !BrowserLink.IsRegisteredFor(Application.ExecutablePath))
+            if (!unattended && settings.BrowserLink && !BrowserLink.IsRegisteredFor(Application.ExecutablePath))
             {
                 try { BrowserLink.Register(Application.ExecutablePath); } catch (Exception) { /* optional feature */ }
             }
@@ -1190,7 +1196,41 @@ namespace ChainShot
         }
 
         // ----------------------------------------------------------- integration
-        const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        /// <summary>The browser link writes to the registry: ask once instead of doing it silently.</summary>
+        void AskBrowserLinkOnce(ToolStripMenuItem item)
+        {
+            if (unattended || settings.BrowserLinkAsked) return;
+            settings.BrowserLinkAsked = true;
+            var r = MessageBox.Show(this,
+                "Do you use the ChainShot browser extension (Chrome, Edge, Brave, Firefox)?\n\n" +
+                "If you allow it, the extension can save its web captures into the case open in ChainShot. " +
+                "ChainShot registers itself for these browsers (current user only, in the registry and in " +
+                "%APPDATA%\\ChainShot). Nothing is sent over the network.\n\n" +
+                "You can change this at any time: Options > Accept captures from the browser extension.",
+                "ChainShot - browser link", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            item.Checked = r == DialogResult.Yes; // CheckedChanged registers and saves
+            settings.BrowserLink = item.Checked;
+            settings.Save();
+        }
+
+        void UninstallFromGui()
+        {
+            var r = MessageBox.Show(this,
+                "This removes from this computer, for the current user:\n\n" +
+                "  - the Start menu shortcut and the start with Windows entry\n" +
+                "  - the browser link (registry entries and manifests)\n" +
+                "  - ChainShot settings in %APPDATA%\\ChainShot (recent cases, current case and tag)\n\n" +
+                "Your case folders are NOT touched. ChainShot then closes; delete ChainShot.exe to finish.\n\nContinue?",
+                "ChainShot - uninstall", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+            if (r != DialogResult.OK) return;
+            var done = Uninstaller.Run(false);
+            MessageBox.Show(this, "Removed:\n" + string.Join("\n", done) + "\n\nYou can now delete " + Application.ExecutablePath,
+                "ChainShot - uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Start("explorer.exe", "/select,\"" + Application.ExecutablePath + "\"");
+            Quit();
+        }
+
+        public const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
         static bool IsStartupEnabled()
         {

@@ -48,7 +48,7 @@ import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 TOOL_ID = f"chainshot-py/{__version__}"
 
 # --------------------------------------------------------------------------- #
@@ -957,10 +957,11 @@ def cmd_package(args) -> int:
 # (Chrome native messaging, see docs/browser-link.md)
 # --------------------------------------------------------------------------- #
 HOST_NAME = "com.chainshot.host"
-HOST_PROTOCOL = 1
+HOST_PROTOCOL = 2  # 2: "format": "mhtml" page archives
 # Extension IDs allowed to talk to the host: the ID fixed by the "key" of extension/manifest.json
 # (unpacked install), then the store IDs once published.
 EXTENSION_IDS = ("dcccfnbiglhpbcdhbmokfilfgpfnmikf",)
+GECKO_ID = "chainshot@dalkin69"  # Firefox add-on ID (tools/build_extension.py)
 MAX_PNG_BYTES = 60 * 1024 * 1024
 _UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 
@@ -1008,9 +1009,16 @@ def host_handle(msg: dict) -> dict:
         return {"ok": True, "intact": res.ok, "entries": len(res.rows), "seals": len(res.seals), "problems": problems[:20]}
     if kind == "capture":
         import base64
-        data = base64.b64decode(msg.get("png_base64", ""), validate=True)
-        if not data.startswith(b"\x89PNG\r\n\x1a\n") or len(data) > MAX_PNG_BYTES:
-            raise ChainShotError("the capture is not a PNG image (or is too large)")
+        fmt = str(msg.get("format", "png")).lower()
+        if fmt not in ("png", "mhtml"):
+            raise ChainShotError(f"unsupported capture format: {fmt}")
+        data = base64.b64decode(msg.get("png_base64") or msg.get("data_base64") or "", validate=True)
+        if len(data) > MAX_PNG_BYTES:
+            raise ChainShotError("the capture is too large")
+        if fmt == "png" and not data.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ChainShotError("the capture is not a PNG image")
+        if fmt == "mhtml" and b"MIME-Version" not in data[:4096] and not data.startswith(b"From:"):
+            raise ChainShotError("the page archive is not an MHTML document")
         when = utc_now()
         utc = str(msg.get("utc", ""))
         if _UTC_RE.match(utc):
@@ -1021,13 +1029,14 @@ def host_handle(msg: dict) -> dict:
         with case.lock():
             entries = case.entries()
             seq = len(entries) + 1
-            if str(msg.get("expected_seq", "")) != str(seq):
+            # A banner shows the entry number: it must still be the next one (not needed for archives).
+            if fmt == "png" and str(msg.get("expected_seq", "")) != str(seq):
                 info = _host_case_info(case)
                 info.update(ok=False, retry=True, error=f"the journal changed (next entry is #{seq})")
                 return info
             safe_tag = re.sub(r"[^\w\-]", "_", tag) or "untagged"
             stamp = when.strftime("%Y%m%dT%H%M%S") + f"{when.microsecond // 1000:03d}Z"
-            name = f"{seq:04d}_{stamp}_{safe_tag}.png"
+            name = f"{seq:04d}_{stamp}_{safe_tag}.{fmt}"
             (case.root / "captures").mkdir(exist_ok=True)
             target = case.root / "captures" / name
             with open(target, "xb") as fh:
@@ -1083,6 +1092,19 @@ def host_manifest(path: str, extra_ids=()) -> dict:
             "path": path, "type": "stdio", "allowed_origins": [f"chrome-extension://{i}/" for i in ids]}
 
 
+def firefox_manifest(path: str) -> dict:
+    return {"name": HOST_NAME, "description": "ChainShot - save browser captures into the current case",
+            "path": path, "type": "stdio", "allowed_extensions": [GECKO_ID]}
+
+
+def _firefox_dirs() -> list[Path]:
+    home = Path.home()
+    if sys.platform == "darwin":
+        root = home / "Library" / "Application Support" / "Mozilla"
+        return [root / "NativeMessagingHosts"] if root.exists() else []
+    return [home / ".mozilla" / "native-messaging-hosts"] if (home / ".mozilla").exists() else []
+
+
 def _posix_manifest_dirs() -> list[Path]:
     home = Path.home()
     if sys.platform == "darwin":
@@ -1106,8 +1128,9 @@ def cmd_register_browser(args) -> int:
         import winreg
         launcher = cfg / "chainshot-host.bat"
         manifest_path = cfg / f"{HOST_NAME}.json"
+        ff_path = cfg / f"{HOST_NAME}.firefox.json"
         if args.remove:
-            for k in WIN_BROWSER_KEYS:
+            for k in WIN_BROWSER_KEYS + (r"Software\Mozilla",):
                 try:
                     winreg.DeleteKey(winreg.HKEY_CURRENT_USER, rf"{k}\NativeMessagingHosts\{HOST_NAME}")
                 except OSError:
@@ -1119,16 +1142,22 @@ def cmd_register_browser(args) -> int:
         for k in WIN_BROWSER_KEYS:
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"{k}\NativeMessagingHosts\{HOST_NAME}") as key:
                 winreg.SetValueEx(key, "", 0, winreg.REG_SZ, str(manifest_path))
-        print(f"Browser link registered for Chrome, Edge, Brave, Chromium, Vivaldi: {manifest_path}")
+        ff_path.write_text(json.dumps(firefox_manifest(str(launcher)), indent=2), encoding="utf-8")
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Mozilla\NativeMessagingHosts\{HOST_NAME}") as key:
+            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, str(ff_path))
+        print(f"Browser link registered for Chrome, Edge, Brave, Chromium, Vivaldi, Firefox: {manifest_path}")
         return 0
-    dirs = [Path(d) for d in args.dir] if args.dir else _posix_manifest_dirs()
+    custom = bool(args.dir or args.firefox_dir)
+    dirs = [Path(d) for d in args.dir or []] if custom else _posix_manifest_dirs()
+    ff_dirs = [Path(d) for d in args.firefox_dir or []] if custom else _firefox_dirs()
     if args.remove:
-        for d in dirs:
+        for d in dirs + ff_dirs:
             (d / f"{HOST_NAME}.json").unlink(missing_ok=True)
         print("Browser link removed.")
         return 0
-    if not dirs:
-        raise ChainShotError("no Chromium-based browser profile found; use --dir <NativeMessagingHosts folder>")
+    if not dirs and not ff_dirs:
+        raise ChainShotError("no browser profile found; use --dir <NativeMessagingHosts folder> (Chromium) "
+                             "or --firefox-dir <native-messaging-hosts folder>")
     launcher = cfg / "chainshot-host"
     launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" native-host "$@"\n', encoding="utf-8")
     launcher.chmod(0o755)
@@ -1137,6 +1166,10 @@ def cmd_register_browser(args) -> int:
         (d / f"{HOST_NAME}.json").write_text(json.dumps(host_manifest(str(launcher), args.extension_id), indent=2),
                                              encoding="utf-8")
         print(f"Browser link registered: {d / (HOST_NAME + '.json')}")
+    for d in ff_dirs:
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{HOST_NAME}.json").write_text(json.dumps(firefox_manifest(str(launcher)), indent=2), encoding="utf-8")
+        print(f"Browser link registered for Firefox: {d / (HOST_NAME + '.json')}")
     return 0
 
 
@@ -1214,7 +1247,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("register-browser", help="let the browser extension save captures into the current case")
     s.add_argument("--remove", action="store_true")
     s.add_argument("--extension-id", action="append", default=[], help="also allow this extension ID")
-    s.add_argument("--dir", action="append", help="NativeMessagingHosts folder (default: every browser found)")
+    s.add_argument("--dir", action="append", help="NativeMessagingHosts folder of a Chromium browser (default: every browser found)")
+    s.add_argument("--firefox-dir", action="append", help="native-messaging-hosts folder of Firefox (default: ~/.mozilla/...)")
     s.set_defaults(func=cmd_register_browser)
 
     s = sub.add_parser("native-host", help=argparse.SUPPRESS)
@@ -1225,7 +1259,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    if argv and argv[0].startswith("chrome-extension://"):  # started by the browser
+    if argv and (argv[0].startswith("chrome-extension://")  # started by a Chromium browser
+                 or (len(argv) >= 2 and argv[0].endswith(".json") and argv[1] == GECKO_ID)):  # by Firefox
         return cmd_native_host()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

@@ -20,7 +20,7 @@
   <a href="#built-with-ai"><img alt="Built with AI" src="https://img.shields.io/badge/built%20with-AI%20(Claude)-c99a06"></a>
 </p>
 
-<p align="center"><a href="README.fr.md">Lire en français</a></p>
+<p align="center"><a href="https://dalkin69.github.io/chainshot/"><b>Website</b></a> · <a href="README.fr.md">Lire en français</a></p>
 
 ---
 
@@ -63,7 +63,7 @@ an Autopsy analysis, and grew into a toolkit.
 | --- | --- | --- |
 | [**ChainShot app**](app/) (`ChainShot.exe`) | Windows 10/11, single file, nothing to install | The main Windows tool: create cases, screen/window/region captures with global hotkeys, tags, notes, drag-and-drop file hashing, journal with filter and preview, verification, seals with RFC 3161, HTML report, evidence package, tray icon; command line included |
 | [**PowerShell module**](windows/) | Windows PowerShell 5.1 or 7 | The same features from PowerShell, for scripts and command-line users, with its own tray app |
-| [**Browser extension**](extension/) | Chrome, Edge, Brave (Chromium 116+) | Captures the visible tab with its URL and title, into a case in your Downloads folder or [straight into the case open in the app](docs/browser-link.md) |
+| [**Browser extension**](extension/) | Chrome, Edge, Brave (Chromium 116+), Firefox 140+ | Captures the visible area or the **whole page** with its URL and title, optional **MHTML archive** of the page (Chromium), into a case in your Downloads folder or [straight into the case open in the app](docs/browser-link.md) |
 | [**`chainshot.py`**](python/) | Any OS, Python 3.9+, no dependency | Reference implementation: verify, seal with RFC 3161, HTML report, CSV export, add files and notes |
 
 All four write the **same journal format** ([specification](docs/journal-format.md)) and are tested
@@ -125,9 +125,16 @@ flowchart LR
 
 ### Windows: the ChainShot app
 
-1. Download `chainshot-app-*.zip` from the latest [release](https://github.com/Dalkin69/chainshot/releases), extract it and
-   start `ChainShot.exe` (nothing to install, no admin rights). The executable is not code-signed: if SmartScreen
-   warns you, click **More info > Run anyway** ([why](app/README.md#install)).
+1. Install it with a package manager, or download `chainshot-app-*.zip` from the latest
+   [release](https://github.com/Dalkin69/chainshot/releases), extract it and start `ChainShot.exe` (nothing to install,
+   no admin rights). The executable is not code-signed yet: if SmartScreen warns you, click **More info > Run anyway**
+   ([why](app/README.md#install)).
+
+   ```powershell
+   winget install Dalkin69.ChainShot                                   # once accepted in the winget catalog
+   scoop bucket add chainshot https://github.com/Dalkin69/chainshot; scoop install chainshot
+   ```
+
 2. **New case...**: give the case a name or reference and the examiner name.
 3. Type a **tag** (for example `P17`), then capture with the buttons or the hotkeys, from any application:
 
@@ -140,7 +147,8 @@ flowchart LR
 4. Drop files on the window to hash them (an export from Autopsy, a disk image), add **notes**, then **Verify**,
    **Seal + timestamp**, open the **HTML report** and, to deliver, **Export package**.
 
-Closing the window keeps ChainShot in the notification area with its hotkeys. The [app guide](app/README.md)
+Closing the window keeps ChainShot in the notification area with its hotkeys. To remove it: *Options > Uninstall from
+this computer* (or `ChainShot.exe uninstall`), then delete the file; case folders are never touched. The [app guide](app/README.md)
 covers the options and the command line (`ChainShot.exe verify`, `capture`, `seal --tsa`...).
 
 ### Windows: PowerShell module
@@ -161,19 +169,27 @@ Export-ChainShotReport -Open        # needs Python 3.9+
 Start-ChainShotTray                 # tray icon with the same hotkeys (do not run it together with the app)
 ```
 
-### Browser extension (Chrome, Edge, Brave)
+`Uninstall-ChainShot.ps1` (in the same zip) removes the module and its shortcuts.
 
-1. Download `chainshot-extension-*.zip` from the [releases](https://github.com/Dalkin69/chainshot/releases) and extract it
-   (or use the `extension/` folder of a clone).
-2. Open `chrome://extensions` (or `edge://extensions`), enable **Developer mode**, click **Load unpacked** and select the folder.
-3. Click the ChainShot icon, create a case, then capture with the button or `Alt+Shift+S`.
+### Browser extension (Chrome, Edge, Brave, Firefox)
+
+Store listings are being prepared ([publishing guide](docs/publishing-extension.md)). Until then:
+
+1. Chrome, Edge, Brave: download `chainshot-extension-*.zip` from the [releases](https://github.com/Dalkin69/chainshot/releases)
+   and extract it (or use the `extension/` folder of a clone). Open `chrome://extensions` (or `edge://extensions`), enable
+   **Developer mode**, click **Load unpacked** and select the folder.
+2. Firefox 140+: `chainshot-extension-firefox-*.zip`; for a quick try, `about:debugging` > *This Firefox* > *Load Temporary
+   Add-on* and select the zip (removed when Firefox closes until the add-on is published).
+3. Click the ChainShot icon, create a case, then capture with the button or `Alt+Shift+S`. Tick **Full page** to capture
+   the whole page (it is scrolled and stitched; fixed headers appear once) and **Page archive** to save an MHTML copy of
+   the page next to the image (Chromium only; asked once).
 
 The case is written to `Downloads/ChainShot/<case>-<UTC>/`. It contains the same files as a Windows case and is verified
 the same way. The extension has no host permission: it can capture a tab only when you click its button or press its
 shortcut, and it sends nothing over the network.
 
 **Into the app's case.** In the popup, choose **ChainShot app**: captures, notes and the tag then go into the case open in
-ChainShot (Windows: the app registers the link when it starts; Linux and macOS: `python3 chainshot.py register-browser`
+ChainShot (Windows: the app offers to register the link at its first start; Linux and macOS: `python3 chainshot.py register-browser`
 and `chainshot.py use <case>`). Web captures, screen captures, files and notes end up in one journal. See
 [docs/browser-link.md](docs/browser-link.md).
 
@@ -266,6 +282,7 @@ Do **not** open `journal.jsonl` in Excel and save it: that rewrites the file. Us
 | `use [<case>]` | show or set the current case (shared with the module and `chainshot.py`) |
 | `package [<case>] [--out FILE.zip] [--seal] [--tsa [URL]]` | evidence package for delivery |
 | `register-browser [--extension-id ID] [--remove]` | browser link for the extension (also done by the app at startup) |
+| `uninstall [--keep-settings]` | remove the shortcut, start with Windows, browser link and settings (not the cases) |
 | `selftest <vectors.json>` | check the implementation against the shared vectors |
 
 Commands use the current case unless `--case <folder>` is given. From PowerShell, add `| Out-Host` so the prompt
@@ -353,6 +370,7 @@ Every push runs the full test suite on GitHub Actions ([workflow](.github/workfl
 | App end-to-end | Windows (real desktop) | `ChainShot.exe` built from source: vectors, **real captures with the banner** (screen, rectangle, an Edge window), cases verified by `chainshot.py` and the module in both directions, shared settings, tampering, **RFC 3161** against an OpenSSL authority, browser link protocol and registration, evidence package verified by its own `chainshot.py`, HTML report, the window itself (the screenshots above come from it) |
 | Python `unittest` | Linux, Windows, macOS; Python 3.9 and 3.13 | journal, tampering scenarios, seals, legacy v0, report, **RFC 3161 with a real OpenSSL timestamp authority**, clock offset, browser link host, evidence packages |
 | Pester | Windows PowerShell 5.1, PowerShell 7 on Windows and Linux | journal, tampering, seals, **real screen/window/rectangle captures**, **tray app and hotkey registration**, interoperability with Python in both directions |
+| Selenium | Firefox | Firefox build of the extension checked by Mozilla's add-on linter, then capture, full page and **browser link** with `chainshot.py` in a real Firefox |
 | Playwright | Chromium | extension loaded in a real browser: capture, files written by the downloads API, verification by `chainshot.py`, tamper detection, popup, **browser link** with `chainshot.py` as native messaging host |
 | Shared vectors | all four | `tests/vectors/canonical-vectors.json`: identical canonical text, entry hashes and chain values |
 

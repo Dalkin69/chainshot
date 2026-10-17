@@ -14,7 +14,7 @@
   <img alt="Licence MIT" src="https://img.shields.io/badge/licence-MIT-blue.svg">
 </p>
 
-<p align="center"><a href="README.md">Read in English</a></p>
+<p align="center"><a href="https://dalkin69.github.io/chainshot/fr/"><b>Site web</b></a> · <a href="README.md">Read in English</a></p>
 
 ---
 
@@ -42,7 +42,7 @@ analyse Autopsy, puis il est devenu une boîte à outils.
 | --- | --- | --- |
 | [**Application ChainShot**](app/) (`ChainShot.exe`) | Windows 10/11, un seul fichier, rien à installer | L'outil Windows principal : création de cas, captures écran, fenêtre et zone avec raccourcis globaux, tags, notes, hachage de fichiers par glisser-déposer, vérification, scellés RFC 3161, rapport HTML, icône de notification ; ligne de commande incluse |
 | [**Module PowerShell**](windows/) | Windows PowerShell 5.1 ou 7 | Les mêmes fonctions depuis PowerShell, pour les scripts et les adeptes de la ligne de commande, avec sa propre icône de notification |
-| [**Extension navigateur**](extension/) | Chrome, Edge, Brave (Chromium 116+) | Capture l'onglet visible avec son URL et son titre, écrit un cas ChainShot dans le dossier Téléchargements |
+| [**Extension navigateur**](extension/) | Chrome, Edge, Brave (Chromium 116+), Firefox 140+ | Capture la zone visible ou la **page entière** avec son URL et son titre, **archive MHTML** de la page en option (Chromium), dans un cas du dossier Téléchargements ou directement dans le cas ouvert dans l'application |
 | [**`chainshot.py`**](python/) | Tout OS, Python 3.9+, sans dépendance | Implémentation de référence : vérification, scellés RFC 3161, rapport HTML, export CSV, ajout de fichiers et de notes |
 
 Les quatre écrivent **le même format de journal** ([spécification, en anglais](docs/journal-format.md)) et sont
@@ -93,9 +93,16 @@ la ligne et la barre d'état indiquent quelle preuve ne correspond plus à son S
 
 ### Windows : l'application ChainShot
 
-1. Téléchargez `chainshot-app-*.zip` depuis la dernière [release](https://github.com/Dalkin69/chainshot/releases),
-   décompressez-le et lancez `ChainShot.exe` (rien à installer, pas de droits administrateur). L'exécutable n'est pas
-   signé : si SmartScreen affiche un avertissement, cliquez sur **Informations complémentaires > Exécuter quand même**
+1. Installez-le avec un gestionnaire de paquets, ou téléchargez `chainshot-app-*.zip` depuis la dernière
+   [release](https://github.com/Dalkin69/chainshot/releases), décompressez-le et lancez `ChainShot.exe` (rien à installer,
+   pas de droits administrateur).
+
+   ```powershell
+   winget install Dalkin69.ChainShot                                   # après validation dans le catalogue winget
+   scoop bucket add chainshot https://github.com/Dalkin69/chainshot; scoop install chainshot
+   ```
+
+   L'exécutable n'est pas encore signé : si SmartScreen affiche un avertissement, cliquez sur **Informations complémentaires > Exécuter quand même**
    ([pourquoi](app/README.md#install)). Le menu **Options** ajoute ChainShot au menu Démarrer et au démarrage de Windows.
 2. **New case...** : nom ou référence du cas et nom de l'examinateur. L'interface est en anglais.
 3. Saisissez un **tag** (par exemple `P17`), puis capturez avec les boutons ou les raccourcis, depuis n'importe
@@ -110,7 +117,9 @@ la ligne et la barre d'état indiquent quelle preuve ne correspond plus à son S
 4. Glissez des fichiers sur la fenêtre pour les hacher (export Autopsy, image disque), ajoutez des **notes**, puis
    **Verify**, **Seal + timestamp**, ouvrez le **HTML report** et, pour la remise, **Export package**.
 
-Fermer la fenêtre laisse ChainShot dans la zone de notification avec ses raccourcis. Le [guide de l'application](app/README.md)
+Fermer la fenêtre laisse ChainShot dans la zone de notification avec ses raccourcis. Pour le retirer : *Options >
+Uninstall from this computer* (ou `ChainShot.exe uninstall`), puis supprimez le fichier ; les dossiers de cas ne sont
+jamais touchés. Le [guide de l'application](app/README.md)
 (en anglais) détaille les options et la ligne de commande (`ChainShot.exe verify`, `capture`, `seal --tsa`...).
 
 ### Windows : module PowerShell
@@ -131,20 +140,27 @@ Export-ChainShotReport -Open        # nécessite Python 3.9+
 Start-ChainShotTray                 # icône de notification avec les mêmes raccourcis (pas en même temps que l'application)
 ```
 
-### Extension navigateur (Chrome, Edge, Brave)
+`Uninstall-ChainShot.ps1` (dans le même zip) retire le module et ses raccourcis.
 
-1. Téléchargez `chainshot-extension-*.zip` depuis les [releases](https://github.com/Dalkin69/chainshot/releases) et décompressez-le
-   (ou utilisez le dossier `extension/` d'un clone).
-2. Ouvrez `chrome://extensions` (ou `edge://extensions`), activez le **Mode développeur**, cliquez sur
+### Extension navigateur (Chrome, Edge, Brave, Firefox)
+
+Les fiches des stores sont en préparation ([guide de publication](docs/publishing-extension.md)). En attendant :
+
+1. Chrome, Edge, Brave : téléchargez `chainshot-extension-*.zip` depuis les [releases](https://github.com/Dalkin69/chainshot/releases)
+   et décompressez-le. Ouvrez `chrome://extensions` (ou `edge://extensions`), activez le **Mode développeur**, cliquez sur
    **Charger l'extension non empaquetée** et sélectionnez le dossier.
-3. Cliquez sur l'icône ChainShot, créez un cas, puis capturez avec le bouton ou `Alt+Maj+S`.
+2. Firefox 140+ : `chainshot-extension-firefox-*.zip` ; pour un essai, `about:debugging` > *Ce Firefox* > *Charger un
+   module complémentaire temporaire* et choisissez le zip (retiré à la fermeture de Firefox tant qu'il n'est pas publié).
+3. Cliquez sur l'icône ChainShot, créez un cas, puis capturez avec le bouton ou `Alt+Maj+S`. Cochez **Full page** pour la
+   page entière (défilée et assemblée ; les en-têtes fixes n'apparaissent qu'une fois) et **Page archive** pour enregistrer
+   une copie MHTML de la page à côté de l'image (Chromium uniquement ; demandé une fois).
 
 Le cas est écrit dans `Téléchargements/ChainShot/<cas>-<UTC>/`. Il contient les mêmes fichiers qu'un cas Windows et se
 vérifie de la même façon. L'extension n'a aucune permission sur les sites : elle ne peut capturer un onglet que
 lorsque vous cliquez sur son bouton ou utilisez son raccourci, et elle n'envoie rien sur le réseau.
 
 **Dans le cas de l'application.** Dans la fenêtre de l'extension, choisissez **ChainShot app** : captures, notes et tag
-vont alors dans le cas ouvert dans ChainShot (Windows : l'application enregistre le lien à son démarrage ; Linux et
+vont alors dans le cas ouvert dans ChainShot (Windows : l'application propose d'enregistrer le lien à son premier démarrage ; Linux et
 macOS : `python3 chainshot.py register-browser` puis `chainshot.py use <cas>`). Captures web, captures d'écran, fichiers
 et notes se retrouvent dans un seul journal. Voir [docs/browser-link.md](docs/browser-link.md) (en anglais).
 

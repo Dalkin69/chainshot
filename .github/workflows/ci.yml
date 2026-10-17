@@ -48,6 +48,12 @@ jobs:
       - name: Every component has the same version number
         if: runner.os == 'Linux'
         run: python tests/check_versions.py
+      - name: Scoop and winget manifests can be generated
+        if: runner.os == 'Linux'
+        run: |
+          python packaging/update_manifests.py 9.9.9 "$(printf 'a%.0s' $(seq 64))" --root "$RUNNER_TEMP/pm"
+          python -c "import json,sys; m=json.load(open(sys.argv[1])); assert m['version']=='9.9.9' and m['hash']=='a'*64 and m['bin']" "$RUNNER_TEMP/pm/bucket/chainshot.json"
+          grep -q "InstallerSha256: $(printf 'A%.0s' $(seq 64))" "$RUNNER_TEMP"/pm/packaging/winget/manifests/d/Dalkin69/ChainShot/9.9.9/Dalkin69.ChainShot.installer.yaml
 
   powershell:
     name: PowerShell ${{ matrix.shell }} (${{ matrix.os }})
@@ -176,6 +182,27 @@ jobs:
         run: test ! -f "test-output/${{ matrix.image }}" || python3 tests/ci_annotate.py thumbnail "test-output/${{ matrix.image }}" "${{ matrix.image }}" full 2/3
       - name: Part 3
         run: test ! -f "test-output/${{ matrix.image }}" || python3 tests/ci_annotate.py thumbnail "test-output/${{ matrix.image }}" "${{ matrix.image }}" full 3/3
+
+  extension-firefox:
+    name: Browser extension (Firefox)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build the Firefox package
+        run: python tools/build_extension.py --out dist
+      - name: Mozilla add-on linter (same checks as addons.mozilla.org)
+        run: npx --yes web-ext@8 lint --source-dir dist/extension-firefox
+      - name: End-to-end tests in Firefox (capture, full page, browser link with chainshot.py)
+        run: |
+          python -m pip install --quiet selenium
+          firefox --version
+          python tests/firefox_e2e.py dist/extension-firefox
 
   extension:
     name: Browser extension (Chromium)
