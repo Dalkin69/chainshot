@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy policy - ChainShot</title>
+<meta name="description" content="ChainShot privacy policy: no telemetry, no data collected; the only network request is the optional RFC 3161 timestamp.">
+<link rel="canonical" href="https://dalkin69.github.io/chainshot/privacy.html">
+<link rel="alternate" hreflang="en" href="https://dalkin69.github.io/chainshot/privacy.html">
+<link rel="alternate" hreflang="fr" href="https://dalkin69.github.io/chainshot/fr/privacy.html">
+<link rel="icon" href="img/icon128.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="img/icon128.png" alt="">ChainShot</a>
+    <nav aria-label="Main"><a href="./">Home</a><a href="https://github.com/Dalkin69/chainshot">GitHub</a><a href="fr/privacy.html" hreflang="fr" lang="fr">Français</a></nav>
+  </header>
+  <main class="doc">
+    <h1>Privacy policy</h1>
+    <p class="note">Last updated: 2026-10-17</p>
+
+    <p>ChainShot is a forensic tool: what it records belongs to you and to your case, and nobody else. This page applies to
+      every component (the Windows app <code>ChainShot.exe</code>, the PowerShell module, <code>chainshot.py</code>, the
+      browser extension) and to this website. It is also the privacy policy of the extension in browser stores.</p>
+
+    <h2>In short</h2>
+    <ul>
+      <li><strong>No telemetry, no analytics, no crash reports, no account, no advertising.</strong></li>
+      <li><strong>No automatic network connection.</strong> ChainShot does not check for updates and does not "phone home".</li>
+      <li><strong>Everything stays on your computer</strong>, in the case folders you choose.</li>
+      <li><strong>Open source</strong> (MIT license): the code can be read and audited in the
+        <a href="https://github.com/Dalkin69/chainshot">public repository</a>, and releases are built from it by GitHub Actions, with their SHA-256.</li>
+    </ul>
+
+    <h2>The only network request: RFC 3161 timestamps, when you ask for one</h2>
+    <p>When you choose <em>Seal + timestamp</em> (app), <code>seal --tsa</code> (command line) or a timestamped seal before
+      a package, ChainShot sends one request to the time-stamp authority you configured (default:
+      <a href="https://freetsa.org">FreeTSA</a>). It contains the SHA-256 of the seal file (a fingerprint from which nothing
+      can be read back), a random number and the hash algorithm identifier. No capture, file, note, case name or personal
+      data is sent. The signed answer is stored in the case. That authority has its own terms and privacy policy.</p>
+    <p>Links in the Help menu of the app open this website or the repository in your web browser; ChainShot itself sends nothing.</p>
+
+    <h2>Browser extension</h2>
+    <table>
+      <tr><th>Data collected</th><td>None. The extension has no server and sends nothing over the network.</td></tr>
+      <tr><th>What it captures</th><td>The visible part of the active tab, or the whole page, only when you click <em>Capture tab</em>
+        or press its shortcut, with the page URL and title; an MHTML copy of the page if you enable <em>Page archive</em>.</td></tr>
+      <tr><th>Where it goes</th><td>Your Downloads folder (<code>ChainShot/&lt;case&gt;/</code>), or, if you choose <em>ChainShot app</em>,
+        the case open in ChainShot on the same computer, through a local channel (native messaging).</td></tr>
+      <tr><th>Stored in the browser</th><td>The journal of the cases created in the browser, the tag and the next note, on this computer only.</td></tr>
+      <tr><th>Permissions</th><td><code>activeTab</code> (the tab you are on, after your click), <code>scripting</code> (full page: scroll
+        the page and restore it), <code>downloads</code> (write the case files), <code>storage</code> (journal and settings),
+        <code>nativeMessaging</code> (the ChainShot app on this computer, only if you select it), optional <code>pageCapture</code>
+        (MHTML archive, asked when you enable it). No host permission: the extension cannot read websites by itself.</td></tr>
+    </table>
+
+    <h2>Windows app and PowerShell module</h2>
+    <ul>
+      <li>Settings are stored in <code>%APPDATA%\ChainShot</code>: current case and tag, app preferences, browser link manifests.</li>
+      <li>Registry values, for the current user only and only when you ask: start with Windows
+        (<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</code>) and the browser link
+        (<code>HKCU\Software\&lt;browser&gt;\NativeMessagingHosts\com.chainshot.host</code>, asked at first start).
+        <em>Options &gt; Uninstall from this computer</em> or <code>ChainShot.exe uninstall</code> removes all of them.</li>
+      <li>Captures contain what is on your screen and may include personal data. Store case folders on media you control and
+        apply the rules of your organisation on evidence and personal data.</li>
+    </ul>
+
+    <h2>This website</h2>
+    <p>No cookies, no trackers, no analytics, no external fonts or scripts. The site is hosted by GitHub Pages: like any web
+      host, GitHub processes technical data such as your IP address to serve and protect the site; see the
+      <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub General Privacy Statement</a>.</p>
+
+    <h2>Your rights and contact</h2>
+    <p>ChainShot's author does not receive or keep any data about you. For any question, open an
+      <a href="https://github.com/Dalkin69/chainshot/issues">issue on GitHub</a>; security problems: <a href="https://github.com/Dalkin69/chainshot/security/advisories/new">private report</a>.</p>
+
+  </main>
+  <footer>
+    <div class="links">
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms of use</a>
+      <a href="legal.html">Legal information</a>
+      <a href="code-signing.html">Code signing policy</a>
+      <a href="https://github.com/Dalkin69/chainshot">Source code</a>
+    </div>
+    <p>ChainShot is free software under the MIT license, made by <a href="https://github.com/Dalkin69">Dalkin69</a>
+      with the help of an AI assistant (Claude, Anthropic).</p>
+  </footer>
+</div>
+</body>
+</html>

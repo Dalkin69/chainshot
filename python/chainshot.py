@@ -48,7 +48,7 @@ import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 TOOL_ID = f"chainshot-py/{__version__}"
 
 # --------------------------------------------------------------------------- #
@@ -960,7 +960,10 @@ HOST_NAME = "com.chainshot.host"
 HOST_PROTOCOL = 2  # 2: "format": "mhtml" page archives
 # Extension IDs allowed to talk to the host: the ID fixed by the "key" of extension/manifest.json
 # (unpacked install), then the store IDs once published.
-EXTENSION_IDS = ("dcccfnbiglhpbcdhbmokfilfgpfnmikf",)
+EXTENSION_IDS = (
+    "dcccfnbiglhpbcdhbmokfilfgpfnmikf",  # unpacked (key in extension/manifest.json)
+    "ejbdnnlgcnogepeclpknfagfhehkhgap",  # Chrome Web Store
+)
 GECKO_ID = "chainshot@dalkin69"  # Firefox add-on ID (tools/build_extension.py)
 MAX_PNG_BYTES = 60 * 1024 * 1024
 _UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")

@@ -14,7 +14,7 @@
 
 Set-StrictMode -Version 2.0
 
-$script:Version       = '1.3.0'
+$script:Version       = '1.3.1'
 $script:ToolId        = "chainshot-ps/$($script:Version)"
 $script:FormatVersion = '1'
 $script:JournalName   = 'journal.jsonl'

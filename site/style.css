@@ -116,3 +116,7 @@ footer .links { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 12px; 
   .fields { grid-template-columns: 1fr; gap: 2px; }
   .fields dd { margin-bottom: 10px; }
 }
+.doc table th { width: 28%; font-weight: 600; }
+.doc ul { padding-left: 22px; }
+.doc li { margin-bottom: 6px; }
+.doc h2 { max-width: none; }

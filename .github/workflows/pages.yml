@@ -27,10 +27,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
+        env:
+          GOOGLE: ${{ vars.GOOGLE_SITE_VERIFICATION }}
+          BING: ${{ vars.BING_SITE_VERIFICATION }}
         run: |
           mkdir -p _site/img
           cp -r site/* _site/
           cp docs/img/*.png extension/icons/icon128.png _site/img/
+          # Search engine ownership tags, from repository variables (Settings > Secrets and
+          # variables > Actions > Variables): GOOGLE_SITE_VERIFICATION, BING_SITE_VERIFICATION.
+          tags=""
+          if [ -n "$GOOGLE" ]; then tags="$tags<meta name=\"google-site-verification\" content=\"$GOOGLE\">"; fi
+          if [ -n "$BING" ]; then tags="$tags<meta name=\"msvalidate.01\" content=\"$BING\">"; fi
+          if [ -n "$tags" ]; then sed -i "s|<meta charset=\"utf-8\">|<meta charset=\"utf-8\">$tags|" _site/index.html; fi
           # Custom domain: put it in site/CNAME (and in the repository settings).
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

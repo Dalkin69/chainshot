@@ -144,7 +144,7 @@ Start-ChainShotTray                 # icône de notification avec les mêmes rac
 
 ### Extension navigateur (Chrome, Edge, Brave, Firefox)
 
-Les fiches des stores sont en préparation ([guide de publication](docs/publishing-extension.md)). En attendant :
+Les fiches des stores arrivent. En attendant :
 
 1. Chrome, Edge, Brave : téléchargez `chainshot-extension-*.zip` depuis les [releases](https://github.com/Dalkin69/chainshot/releases)
    et décompressez-le. Ouvrez `chrome://extensions` (ou `edge://extensions`), activez le **Mode développeur**, cliquez sur

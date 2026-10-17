@@ -173,7 +173,7 @@ Start-ChainShotTray                 # tray icon with the same hotkeys (do not ru
 
 ### Browser extension (Chrome, Edge, Brave, Firefox)
 
-Store listings are being prepared ([publishing guide](docs/publishing-extension.md)). Until then:
+Store listings are on their way. Until then:
 
 1. Chrome, Edge, Brave: download `chainshot-extension-*.zip` from the [releases](https://github.com/Dalkin69/chainshot/releases)
    and extract it (or use the `extension/` folder of a clone). Open `chrome://extensions` (or `edge://extensions`), enable

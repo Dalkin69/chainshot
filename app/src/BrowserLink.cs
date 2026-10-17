@@ -24,7 +24,11 @@ namespace ChainShot
 
         /// <summary>Extensions allowed to talk to ChainShot: the ID fixed by the "key" of
         /// extension/manifest.json (unpacked install), then the store IDs once published.</summary>
-        public static readonly string[] ExtensionIds = { "dcccfnbiglhpbcdhbmokfilfgpfnmikf" };
+        public static readonly string[] ExtensionIds =
+        {
+            "dcccfnbiglhpbcdhbmokfilfgpfnmikf", // unpacked (key in extension/manifest.json)
+            "ejbdnnlgcnogepeclpknfagfhehkhgap", // Chrome Web Store
+        };
 
         /// <summary>Firefox add-on ID (tools/build_extension.py).</summary>
         public const string GeckoId = "chainshot@dalkin69";
@@ -90,7 +94,11 @@ namespace ChainShot
             {
                 string m = Registry.GetValue(@"HKEY_CURRENT_USER\" + BrowserKeys[0] + @"\NativeMessagingHosts\" + HostName, "", null) as string;
                 if (string.IsNullOrEmpty(m) || !File.Exists(m)) return false;
-                return string.Equals(MiniJson.ParseObject(File.ReadAllText(m, Encoding.UTF8)).Str("path"), exePath, StringComparison.OrdinalIgnoreCase);
+                var manifest = MiniJson.ParseObject(File.ReadAllText(m, Encoding.UTF8));
+                if (!string.Equals(manifest.Str("path"), exePath, StringComparison.OrdinalIgnoreCase)) return false;
+                // A newer version may know more extension IDs (store versions): register again then.
+                var origins = (manifest["allowed_origins"] as List<object> ?? new List<object>()).Select(Convert.ToString).ToList();
+                return ExtensionIds.All(id => origins.Contains("chrome-extension://" + id + "/")) && File.Exists(FirefoxManifestPath);
             }
             catch (Exception) { return false; }
         }
