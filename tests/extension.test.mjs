@@ -53,6 +53,7 @@ before(async () => {
   fs.cpSync(path.join(ROOT, 'extension'), extDir, { recursive: true });
   const manifest = JSON.parse(fs.readFileSync(path.join(extDir, 'manifest.json'), 'utf8'));
   manifest.host_permissions = ['<all_urls>'];
+  manifest.permissions.push('pageCapture'); // optional in the real manifest (asked in the popup)
   fs.writeFileSync(path.join(extDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   fs.mkdirSync(path.join(profile, 'Default'), { recursive: true });
@@ -66,8 +67,16 @@ before(async () => {
   // Chromium reads user-level host manifests from <profile>/NativeMessagingHosts.
   py('register-browser', '--dir', path.join(profile, 'NativeMessagingHosts'));
 
-  server = createServer((_req, res) => {
+  server = createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    if (req.url === '/long') {
+      // 3000 px tall, with a fixed header that must appear only once in a full page capture.
+      const bands = Array.from({ length: 10 }, (_, i) =>
+        `<div style="height:300px;background:hsl(${i * 36},70%,50%);font:40px sans-serif">Section ${i + 1}</div>`).join('');
+      res.end('<!doctype html><title>Long page</title><body style="margin:0">' +
+        '<div style="position:fixed;top:0;left:0;right:0;height:40px;background:#000;color:#fff">Fixed header</div>' + bands + '</body>');
+      return;
+    }
     res.end('<!doctype html><title>Evidence page é</title><body style="margin:0;background:#2b4c7e;color:#fff;font:40px sans-serif">' +
       '<h1>Suspicious web page</h1></body>');
   });
@@ -219,4 +228,61 @@ test('app destination: captures go into the current case of the app', async () =
   await popup.close();
   st = await sw.evaluate(() => globalThis.chainshot.setSettings({ destination: 'downloads' }));
   assert.equal(st.app, null);
+});
+
+test('full page capture: scrolls, stitches and records the page size', async () => {
+  const page = context.pages()[0];
+  await page.goto(pageUrl.replace('/evidence', '/long'));
+  await page.bringToFront();
+  const entry = await sw.evaluate(() => globalThis.chainshot.capture({ fullPage: true, note: 'whole page' }));
+  assert.equal(entry.extra.mode, 'fullpage');
+  assert.ok(Number(entry.extra.parts) >= 2, `several parts (${entry.extra.parts})`);
+  const dir = caseDir();
+  const { width, height } = pngSize(path.join(dir, entry.file));
+  if (process.env.CHAINSHOT_KEEP) fs.copyFileSync(path.join(dir, entry.file), path.join(process.env.CHAINSHOT_KEEP, 'fullpage.png'));
+  const [, cssHeight] = entry.extra.page.split('x').map(Number);
+  assert.equal(cssHeight, 3000);
+  const [, shotH] = entry.extra.viewport.split('x').map(Number);
+  assert.ok(shotH >= 3000 * (width / Number(entry.extra.page.split('x')[0])) - 2, `stitched height ${shotH} for ${entry.extra.page}`);
+  assert.ok(height > shotH, 'banner below');
+  const scrollY = await page.evaluate(() => window.scrollY);
+  assert.equal(scrollY, 0, 'scroll position restored');
+  const header = await page.evaluate(() => getComputedStyle(document.querySelector('div')).visibility);
+  assert.equal(header, 'visible', 'fixed elements restored');
+});
+
+test('page archive (MHTML) is saved and chained after the capture', async () => {
+  const page = context.pages()[0];
+  await page.goto(pageUrl);
+  await page.bringToFront();
+  const entry = await sw.evaluate(() => globalThis.chainshot.capture({ archive: true }));
+  assert.ok(entry.archive, 'archive entry');
+  assert.equal(Number(entry.archive.seq), Number(entry.seq) + 1);
+  const dir = caseDir();
+  const mhtml = fs.readFileSync(path.join(dir, entry.archive.file), 'latin1');
+  assert.match(entry.archive.file, /\.mhtml$/);
+  assert.match(mhtml, /MIME-Version/);
+  assert.match(mhtml, /Snapshot-Content-Location: http:\/\/127\.0\.0\.1:\d+\/evidence/);
+  // The journal stays clean (no helper field) and still verifies, except the capture altered earlier.
+  const lines = fs.readFileSync(path.join(dir, 'journal.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.ok(lines.every((l) => !('archive' in l)));
+  const r = await sw.evaluate(() => globalThis.chainshot.verify());
+  assert.equal(r.ok, true, JSON.stringify(r.problems));
+});
+
+test('app destination: full page and archive go to the app case', async () => {
+  const page = context.pages()[0];
+  await page.goto(pageUrl.replace('/evidence', '/long'));
+  await page.bringToFront();
+  await sw.evaluate(() => globalThis.chainshot.setSettings({ destination: 'app' }));
+  const entry = await sw.evaluate(() => globalThis.chainshot.capture({ fullPage: true, archive: true }));
+  assert.equal(entry.extra.mode, 'fullpage');
+  assert.ok(entry.archive && entry.archive.file.endsWith('.mhtml'), JSON.stringify(entry));
+  const lines = fs.readFileSync(path.join(appCase, 'journal.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const last = lines[lines.length - 1];
+  assert.equal(last.file, entry.archive.file);
+  assert.equal(lines[lines.length - 2].extra.mode, 'fullpage');
+  const ok = pyVerify(appCase);
+  assert.equal(ok.code, 0, ok.out);
+  await sw.evaluate(() => globalThis.chainshot.setSettings({ destination: 'downloads' }));
 });

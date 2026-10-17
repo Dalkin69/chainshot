@@ -30,22 +30,15 @@ jobs:
           test "v$(python3 tests/check_versions.py --print)" = "$v" || { echo "::error::tag $v does not match the version in the sources"; exit 1; }
           cp LICENSE PRIVACY.md app/README.md dist/app/
           (cd dist/app && zip -qr "../chainshot-app-${v}.zip" .)
-          mkdir -p dist/ps/ChainShot dist/ext
+          mkdir -p dist/ps/ChainShot
           cp -r windows/ChainShot/* dist/ps/ChainShot/
           cp python/chainshot.py dist/ps/ChainShot/
-          cp windows/Install-ChainShot.ps1 windows/README.md LICENSE PRIVACY.md dist/ps/
+          cp windows/Install-ChainShot.ps1 windows/Uninstall-ChainShot.ps1 windows/README.md LICENSE PRIVACY.md dist/ps/
           (cd dist/ps && zip -qr "../chainshot-powershell-${v}.zip" .)
-          cp -r extension/* dist/ext/
-          cp LICENSE dist/ext/
-          (cd dist/ext && zip -qr "../chainshot-extension-${v}.zip" .)
-          # Store package: same files without README and without the "key" (stores assign their own).
-          mkdir -p dist/ext-store
-          cp -r extension/* LICENSE dist/ext-store/
-          rm -f dist/ext-store/README.md
-          python3 -c "import json,sys; p='dist/ext-store/manifest.json'; m=json.load(open(p)); m.pop('key',None); json.dump(m,open(p,'w'),indent=2)"
-          (cd dist/ext-store && zip -qr "../chainshot-extension-store-${v}.zip" .)
+          # Browser extension: Chromium (unpacked), Chrome Web Store / Edge Add-ons, Firefox (AMO).
+          python3 tools/build_extension.py --out dist --zip "$v"
           cp python/chainshot.py dist/chainshot.py
-          (cd dist && sha256sum chainshot-app-${v}.zip chainshot-powershell-${v}.zip chainshot-extension-${v}.zip chainshot-extension-store-${v}.zip chainshot.py > SHA256SUMS.txt)
+          (cd dist && sha256sum chainshot-app-${v}.zip chainshot-powershell-${v}.zip chainshot-extension-${v}.zip chainshot-extension-store-${v}.zip chainshot-extension-firefox-${v}.zip chainshot.py > SHA256SUMS.txt)
           cat dist/SHA256SUMS.txt
       - name: Release notes from CHANGELOG (if the release has no description)
         env:
@@ -65,3 +58,59 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" --clobber \
             dist/chainshot-app-*.zip dist/chainshot-powershell-*.zip dist/chainshot-extension-*.zip \
             dist/chainshot.py dist/SHA256SUMS.txt
+
+  # Scoop bucket (this repository) and winget manifests, from the published hashes.
+  package-managers:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Write the manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          v="${GITHUB_REF_NAME#v}"
+          gh release download "$GITHUB_REF_NAME" -p SHA256SUMS.txt -D "$RUNNER_TEMP"
+          sha=$(awk -v f="chainshot-app-${GITHUB_REF_NAME}.zip" '$2==f {print $1}' "$RUNNER_TEMP/SHA256SUMS.txt")
+          test -n "$sha"
+          python3 packaging/update_manifests.py "$v" "$sha" --date "$(date -u +%F)"
+          (cd "packaging/winget/manifests/d/Dalkin69/ChainShot/$v" && zip -q "$RUNNER_TEMP/winget-manifests-${GITHUB_REF_NAME}.zip" *.yaml)
+          gh release upload "$GITHUB_REF_NAME" --clobber "$RUNNER_TEMP/winget-manifests-${GITHUB_REF_NAME}.zip"
+      - name: Commit them to main (Scoop reads bucket/chainshot.json from there)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bucket packaging/winget
+          git commit -m "Scoop and winget manifests for ${GITHUB_REF_NAME}" || exit 0
+          git push origin HEAD:main || echo "::warning::Could not push the manifests to main (branch protection?). Commit bucket/ and packaging/winget/ from the release asset winget-manifests-${GITHUB_REF_NAME}.zip."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: winget-manifests
+          path: packaging/winget/manifests
+
+  # Submits the new version to microsoft/winget-pkgs when a WINGET_TOKEN secret exists
+  # (classic token with public_repo scope; see docs/distribution.md).
+  winget:
+    needs: package-managers
+    runs-on: windows-latest
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: No token configured
+        if: env.WINGET_TOKEN == ''
+        run: echo "::notice::WINGET_TOKEN secret not set; submit packaging/winget manifests by hand (docs/distribution.md)."
+      - uses: actions/download-artifact@v4
+        if: env.WINGET_TOKEN != ''
+        with:
+          name: winget-manifests
+          path: manifests
+      - name: Submit to winget-pkgs
+        if: env.WINGET_TOKEN != ''
+        shell: pwsh
+        run: |
+          $v = "$env:GITHUB_REF_NAME".TrimStart('v')
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          .\wingetcreate.exe submit --token $env:WINGET_TOKEN --prtitle "New version: Dalkin69.ChainShot $v" "manifests/d/Dalkin69/ChainShot/$v"

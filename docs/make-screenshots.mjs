@@ -82,7 +82,7 @@ for (const url of Object.keys(PAGES)) {
 
 const id = new URL(sw.url()).host;
 const popup = await context.newPage();
-await popup.setViewportSize({ width: 390, height: 470 });
+await popup.setViewportSize({ width: 390, height: 520 });
 await popup.goto(`chrome-extension://${id}/popup.html`);
 await popup.waitForFunction(() => document.getElementById('caseLine').textContent.includes('entries'));
 await popup.screenshot({ path: path.join(OUT, 'extension-popup.png') });

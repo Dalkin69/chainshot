@@ -19,12 +19,15 @@ namespace ChainShot
     public static class BrowserLink
     {
         public const string HostName = "com.chainshot.host";
-        public const int Protocol = 1;
+        public const int Protocol = 2; // 2: "format": "mhtml" page archives
         const int MaxPngBytes = 60 * 1024 * 1024;
 
         /// <summary>Extensions allowed to talk to ChainShot: the ID fixed by the "key" of
         /// extension/manifest.json (unpacked install), then the store IDs once published.</summary>
         public static readonly string[] ExtensionIds = { "dcccfnbiglhpbcdhbmokfilfgpfnmikf" };
+
+        /// <summary>Firefox add-on ID (tools/build_extension.py).</summary>
+        public const string GeckoId = "chainshot@dalkin69";
 
         static readonly string[] BrowserKeys =
         {
@@ -34,6 +37,14 @@ namespace ChainShot
 
         // ------------------------------------------------------------ registration
         static string ManifestPath { get { return Path.Combine(SharedState.Dir, HostName + ".json"); } }
+        static string FirefoxManifestPath { get { return Path.Combine(SharedState.Dir, HostName + ".firefox.json"); } }
+        const string FirefoxKey = @"Software\Mozilla\NativeMessagingHosts\" + HostName;
+
+        /// <summary>True when Firefox started us: arguments are the manifest path and the add-on ID.</summary>
+        public static bool IsFirefoxLaunch(string[] args)
+        {
+            return args.Length >= 2 && args[0].EndsWith(".json", StringComparison.OrdinalIgnoreCase) && args[1] == GeckoId;
+        }
 
         /// <summary>Writes the host manifest next to the settings and registers it for every
         /// Chromium-based browser (current user only).</summary>
@@ -51,6 +62,15 @@ namespace ChainShot
             foreach (string k in BrowserKeys)
                 using (var key = Registry.CurrentUser.CreateSubKey(k + @"\NativeMessagingHosts\" + HostName))
                     key.SetValue("", ManifestPath);
+            // Firefox: same host, its own manifest format (allowed_extensions).
+            var ff = new JsonObject();
+            ff["name"] = HostName;
+            ff["description"] = manifest["description"];
+            ff["path"] = exePath;
+            ff["type"] = "stdio";
+            ff["allowed_extensions"] = new List<object> { GeckoId };
+            File.WriteAllText(FirefoxManifestPath, MiniJson.Serialize(ff, true) + "\n", Format.Utf8);
+            using (var key = Registry.CurrentUser.CreateSubKey(FirefoxKey)) key.SetValue("", FirefoxManifestPath);
             return ManifestPath;
         }
 
@@ -58,7 +78,9 @@ namespace ChainShot
         {
             foreach (string k in BrowserKeys)
                 Registry.CurrentUser.DeleteSubKeyTree(k + @"\NativeMessagingHosts\" + HostName, false);
+            Registry.CurrentUser.DeleteSubKeyTree(FirefoxKey, false);
             try { File.Delete(ManifestPath); } catch (IOException) { }
+            try { File.Delete(FirefoxManifestPath); } catch (IOException) { }
         }
 
         /// <summary>True when Chrome's key points to a manifest that launches this executable.</summary>
@@ -216,12 +238,21 @@ namespace ChainShot
             }
             if (kind == "capture")
             {
+                string fmt = msg.Has("format") ? msg.Str("format").ToLowerInvariant() : "png";
+                if (fmt != "png" && fmt != "mhtml") throw new ArgumentException("unsupported capture format: " + fmt);
                 byte[] png;
-                try { png = Convert.FromBase64String(msg.Str("png_base64")); }
-                catch (FormatException) { throw new ArgumentException("the capture is not a PNG image (bad base64)"); }
+                try { png = Convert.FromBase64String(msg.Has("png_base64") ? msg.Str("png_base64") : msg.Str("data_base64")); }
+                catch (FormatException) { throw new ArgumentException("the capture is not valid base64"); }
+                if (png.Length > MaxPngBytes) throw new ArgumentException("the capture is too large");
                 byte[] magic = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
-                if (png.Length < 8 || !magic.SequenceEqual(png.Take(8)) || png.Length > MaxPngBytes)
-                    throw new ArgumentException("the capture is not a PNG image (or is too large)");
+                if (fmt == "png" && (png.Length < 8 || !magic.SequenceEqual(png.Take(8))))
+                    throw new ArgumentException("the capture is not a PNG image");
+                if (fmt == "mhtml")
+                {
+                    string head = Encoding.ASCII.GetString(png, 0, Math.Min(png.Length, 4096));
+                    if (head.IndexOf("MIME-Version", StringComparison.Ordinal) < 0 && !head.StartsWith("From:", StringComparison.Ordinal))
+                        throw new ArgumentException("the page archive is not an MHTML document");
+                }
                 DateTime when = DateTime.UtcNow;
                 string utc = msg.Str("utc");
                 DateTime t;
@@ -233,7 +264,8 @@ namespace ChainShot
                 {
                     var entries = folder.ReadEntries();
                     int seq = entries.Count + 1;
-                    if (msg.Str("expected_seq") != seq.ToString(CultureInfo.InvariantCulture))
+                    // A banner shows the entry number: it must still be the next one (not needed for archives).
+                    if (fmt == "png" && msg.Str("expected_seq") != seq.ToString(CultureInfo.InvariantCulture))
                     {
                         // The banner drawn by the extension shows another number: it redraws and resends.
                         var o = CaseInfo(folder);
@@ -244,7 +276,7 @@ namespace ChainShot
                     }
                     string safeTag = Regex.Replace(tag, @"[^\w\-]", "_");
                     if (safeTag.Length == 0) safeTag = "untagged";
-                    string name = string.Format(CultureInfo.InvariantCulture, "{0:D4}_{1}_{2}.png", seq, Format.FileStamp(when), safeTag);
+                    string name = string.Format(CultureInfo.InvariantCulture, "{0:D4}_{1}_{2}.{3}", seq, Format.FileStamp(when), safeTag, fmt);
                     string dir = Path.Combine(folder.Root, "captures");
                     Directory.CreateDirectory(dir);
                     string path = Path.Combine(dir, name);

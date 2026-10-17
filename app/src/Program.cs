@@ -34,6 +34,8 @@ Command line (the current case is the one selected in the app or with Set-ChainS
                                       zip the case with chainshot.py, VERIFY.txt and SHA256SUMS.txt
   register-browser [--extension-id <id>] [--remove]
                                       let the browser extension save captures into the current case
+  uninstall [--keep-settings]         remove shortcuts, start with Windows, browser link and settings
+                                      (case folders are never touched)
   selftest <canonical-vectors.json>
   --version | --help
 
@@ -44,7 +46,7 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
         static int Main(string[] args)
         {
             // Started by the browser for the extension (Chrome native messaging): binary stdin/stdout.
-            if (args.Length > 0 && args[0].StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase))
+            if (args.Length > 0 && (args[0].StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase) || BrowserLink.IsFirefoxLaunch(args)))
             {
                 try { return BrowserLink.Serve(Console.OpenStandardInput(), Console.OpenStandardOutput()); }
                 catch (Exception) { return 2; }
@@ -73,7 +75,7 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
                     Native.PostMessage(Native.HWND_BROADCAST, MainForm.WM_SHOWME, IntPtr.Zero, IntPtr.Zero);
                     return 0;
                 }
-                var form = new MainForm(!smoke && args.Length > 0 && args[0] == "--minimized");
+                var form = new MainForm(!smoke && args.Length > 0 && args[0] == "--minimized", smoke);
                 if (smoke)
                 {
                     // --smoke-test <out.png> [--case <folder>]: CI check of the window, then exit.
@@ -110,7 +112,7 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
         {
             public readonly List<string> Positional = new List<string>();
             readonly Dictionary<string, string> named = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            static readonly HashSet<string> Flags = new HashSet<string> { "copy", "json", "open", "remove", "seal" };
+            static readonly HashSet<string> Flags = new HashSet<string> { "copy", "json", "open", "remove", "seal", "keep-settings" };
 
             public Options(string[] args)
             {
@@ -206,7 +208,7 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
                 {
                     if (o.Has("remove")) { BrowserLink.Unregister(); w.WriteLine("Browser link removed."); return 0; }
                     var ids = o.Get("extension-id") != null ? new[] { o.Get("extension-id") } : new string[0];
-                    w.WriteLine("Browser link registered for Chrome, Edge, Brave, Chromium and Vivaldi: " + BrowserLink.Register(Application.ExecutablePath, ids));
+                    w.WriteLine("Browser link registered for Chrome, Edge, Brave, Chromium, Vivaldi and Firefox: " + BrowserLink.Register(Application.ExecutablePath, ids));
                     return 0;
                 }
 
@@ -223,6 +225,13 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
                     w.WriteLine("Package written: " + p.Path);
                     w.WriteLine("    SHA-256 " + p.Sha256);
                     w.WriteLine("Send this SHA-256 to the recipient by another channel (or put it in your report).");
+                    return 0;
+                }
+
+                case "uninstall":
+                {
+                    foreach (string line in Uninstaller.Run(o.Has("keep-settings"))) w.WriteLine("Removed: " + line);
+                    w.WriteLine("Case folders were not touched. Delete " + Application.ExecutablePath + " to finish.");
                     return 0;
                 }
 

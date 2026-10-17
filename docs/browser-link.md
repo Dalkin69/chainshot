@@ -23,7 +23,7 @@ to it through its standard input and output ([Chrome native messaging](https://d
 
 | System | Host | Registration |
 | --- | --- | --- |
-| Windows | `ChainShot.exe` | automatic when the app starts (Options > *Accept captures from the browser extension*), or `ChainShot.exe register-browser` |
+| Windows | `ChainShot.exe` | the app asks at its first start (then Options > *Accept captures from the browser extension*), or `ChainShot.exe register-browser` |
 | Linux, macOS (or Windows without the app) | `chainshot.py` | `python3 chainshot.py register-browser`, then `python3 chainshot.py use <case folder>` |
 
 Then, in the extension popup, choose **ChainShot app**. The popup shows the current case of the app; captures,
@@ -37,7 +37,12 @@ only extension allowed to start it, and records its location:
 - Linux: `~/.config/{google-chrome, chromium, microsoft-edge, BraveSoftware/Brave-Browser, vivaldi}/NativeMessagingHosts/`;
 - macOS: `~/Library/Application Support/{Google/Chrome, Chromium, Microsoft Edge, BraveSoftware/Brave-Browser, Vivaldi}/NativeMessagingHosts/`.
 
-`--remove` (or unchecking the option in the app) deletes them. If ChainShot.exe is moved, the app updates the
+Firefox reads its own manifest format (`allowed_extensions` with the add-on ID `chainshot@dalkin69`):
+`HKCU\Software\Mozilla\NativeMessagingHosts\com.chainshot.host` on Windows, `~/.mozilla/native-messaging-hosts/` on
+Linux, `~/Library/Application Support/Mozilla/NativeMessagingHosts/` on macOS. Firefox starts the host with the manifest
+path and the add-on ID as arguments; both hosts recognise them.
+
+`--remove` (or unchecking the option in the app, or `ChainShot.exe uninstall`) deletes them. If ChainShot.exe is moved, the app updates the
 registration at its next start.
 
 **Extension IDs.** The `key` in `extension/manifest.json` gives the unpacked extension a fixed ID,
@@ -57,7 +62,7 @@ registration at its next start.
   extension redraws the banner (at most three times), so the number on the image always matches the journal.
 - The capture time is the browser's, when it is within 10 minutes of the host's clock; otherwise the host's.
 
-## Protocol (version 1)
+## Protocol (version 2)
 
 Every message is UTF-8 JSON preceded by its length (32-bit, native byte order), as specified by Chrome.
 Each request gets one reply; `"ok": false` replies carry an `error` text.
@@ -68,9 +73,10 @@ Each request gets one reply; `"ok": false` replies carry an `error` text.
 | `{"type":"set_tag","tag":"P18"}` | `{"ok":true,"tag":"P18"}`: the tag shared with the app and the module |
 | `{"type":"capture","png_base64","utc","expected_seq","url","title","tag","note","source","extra":{"viewport","user_agent"}}` | `{"ok":true,"entry":{"seq","utc","file","sha256","chain"}}`, or `{"ok":false,"retry":true,"case":{...}}` when `expected_seq` is no longer the next entry |
 | `{"type":"note","text","source"[,"tag"]}` | `{"ok":true,"entry":{"seq","utc","chain"}}`; without `tag`, the current tag |
+| `{"type":"capture","format":"mhtml","data_base64",...}` (protocol 2) | page archive saved as `captures/NNNN_<UTC>_<tag>.mhtml`, entry type `browser`; no banner, so no `expected_seq` |
 | `{"type":"verify"}` | `{"ok":true,"intact":true,"entries":12,"seals":1,"problems":[]}` (files re-hashed) |
 
-Limits: PNG only, 60 MB per capture. Only the fields listed in `extra` are kept.
+Limits: PNG or MHTML, 60 MB per message. Only the fields listed in `extra` are kept.
 
 ## Tests
 

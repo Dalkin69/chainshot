@@ -63,7 +63,8 @@ namespace ChainShot
         public string CasesRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ChainShot");
         public bool CopyAddedFiles = true;
         public bool CloseToTray = true;
-        public bool BrowserLink = true;
+        public bool BrowserLink;
+        public bool BrowserLinkAsked;
         public bool ShowPreview = true;
         public bool TrayTipShown;
         public int Delay;
@@ -86,6 +87,7 @@ namespace ChainShot
                 if (o.Has("close_to_tray")) g.CloseToTray = o.Str("close_to_tray") == "true";
                 g.TrayTipShown = o.Str("tray_tip_shown") == "true";
                 if (o.Has("browser_link")) g.BrowserLink = o.Str("browser_link") == "true";
+                g.BrowserLinkAsked = o.Str("browser_link_asked") == "true";
                 if (o.Has("show_preview")) g.ShowPreview = o.Str("show_preview") == "true";
                 int d;
                 if (int.TryParse(o.Str("delay"), out d)) g.Delay = Math.Max(0, Math.Min(60, d));
@@ -115,6 +117,7 @@ namespace ChainShot
                 o["close_to_tray"] = CloseToTray;
                 o["tray_tip_shown"] = TrayTipShown;
                 o["browser_link"] = BrowserLink;
+                o["browser_link_asked"] = BrowserLinkAsked;
                 o["show_preview"] = ShowPreview;
                 o["delay"] = Delay.ToString();
                 File.WriteAllText(FilePath, MiniJson.Serialize(o, true), Format.Utf8);

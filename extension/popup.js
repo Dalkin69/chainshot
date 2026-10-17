@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // ChainShot popup: thin UI over the service worker (all logic lives in background.js).
 
+const ext = globalThis.browser ?? globalThis.chrome; // Firefox: browser, Chromium: chrome
 const $ = (id) => document.getElementById(id);
 
 async function call(cmd, args = {}) {
-  const res = await chrome.runtime.sendMessage({ cmd, ...args });
+  const res = await ext.runtime.sendMessage({ cmd, ...args });
   if (!res?.ok) throw new Error(res?.error || 'No answer from ChainShot.');
   return res.result;
 }
@@ -48,6 +49,9 @@ function renderApp(st) {
 
 function render(st) {
   const dest = st.settings.destination || 'downloads';
+  $('fullPage').checked = st.settings.fullPage === true;
+  $('archiveRow').hidden = !st.mhtml;
+  $('archive').checked = st.settings.archive === true;
   renderDestination(dest);
   if (dest === 'app') { renderApp(st); return; }
   $('appLink').hidden = true;
@@ -69,7 +73,7 @@ function render(st) {
   const last = $('last');
   last.hidden = !st.last;
   if (st.last) {
-    last.innerHTML = '';
+    last.replaceChildren();
     const head = document.createElement('div');
     head.textContent = `#${st.last.seq} ${st.last.type} - ${st.last.utc}`;
     const file = document.createElement('div');
@@ -87,7 +91,7 @@ async function refresh() {
 
 async function init() {
   try {
-    const cmds = await chrome.commands.getAll();
+    const cmds = await ext.commands.getAll();
     const c = cmds.find((x) => x.name === 'capture-tab');
     $('shortcut').textContent = c?.shortcut || 'no shortcut';
   } catch { /* commands API unavailable: keep default label */ }
@@ -106,6 +110,15 @@ async function init() {
       render(await call('setSettings', { destination: b.dataset.dest }));
     });
   }
+  $('fullPage').addEventListener('change', () => call('setSettings', { fullPage: $('fullPage').checked }).catch((e) => say(e.message, 'bad')));
+  $('archive').addEventListener('change', async () => {
+    let on = $('archive').checked;
+    // The page archive needs the optional pageCapture permission, asked once, on this click.
+    if (on) on = await ext.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
+    $('archive').checked = on;
+    await call('setSettings', { archive: on }).catch((e) => say(e.message, 'bad'));
+    if (!on) say('Page archive off.');
+  });
   $('retryApp').addEventListener('click', () => refresh().catch((e) => say(e.message, 'bad')));
   $('showNewCase').addEventListener('click', () => { $('main').hidden = true; $('newCase').hidden = false; });
 
@@ -121,7 +134,8 @@ async function init() {
       const e = await call('capture', { note: $('note').value });
       $('note').value = '';
       await refresh();
-      say(e.destination === 'app' ? `#${e.seq} saved in the ChainShot case.` : `#${e.seq} saved and chained.`, 'ok');
+      const extra = e.archive ? ` Archive #${e.archive.seq}.` : '';
+      say((e.destination === 'app' ? `#${e.seq} saved in the ChainShot case.` : `#${e.seq} saved and chained.`) + extra, 'ok');
     } catch (e) { say(e.message, 'bad'); } finally { busy($('capture'), false); }
   });
 
