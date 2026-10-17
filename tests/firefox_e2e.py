@@ -81,40 +81,52 @@ class Pages(http.server.BaseHTTPRequestHandler):
 
 
 # --------------------------------------------------------------------------- setup
-ext = TMP / "extension"
-shutil.copytree(SRC, ext)
-manifest = json.loads((ext / "manifest.json").read_text(encoding="utf-8"))
-manifest["host_permissions"] = ["<all_urls>"]   # captures without a user gesture, for the test only
-manifest["permissions"].append("tabs")
-(ext / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-DL.mkdir()
-# Browser link: Firefox looks for host manifests in ~/.mozilla/native-messaging-hosts.
-py("register-browser", "--firefox-dir", Path.home() / ".mozilla" / "native-messaging-hosts")
+def setup():
+    global ext, server, BASE, driver, page_window, popup_window
+    ext = TMP / "extension"
+    shutil.copytree(SRC, ext)
+    manifest = json.loads((ext / "manifest.json").read_text(encoding="utf-8"))
+    manifest["host_permissions"] = ["<all_urls>"]   # captures without a user gesture, for the test only
+    manifest["permissions"].append("tabs")
+    (ext / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    DL.mkdir()
+    # Browser link: Firefox looks for host manifests in ~/.mozilla/native-messaging-hosts.
+    py("register-browser", "--firefox-dir", Path.home() / ".mozilla" / "native-messaging-hosts")
 
-server = http.server.HTTPServer(("127.0.0.1", 0), Pages)
-threading.Thread(target=server.serve_forever, daemon=True).start()
-BASE = f"http://127.0.0.1:{server.server_port}"
+    server = http.server.HTTPServer(("127.0.0.1", 0), Pages)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    BASE = f"http://127.0.0.1:{server.server_port}"
 
-opts = Options()
-opts.add_argument("-headless")
-opts.set_preference("extensions.webextensions.uuids", json.dumps({GECKO_ID: UUID}))
-opts.set_preference("browser.download.folderList", 2)
-opts.set_preference("browser.download.dir", str(DL))
-opts.set_preference("browser.download.useDownloadDir", True)
-opts.set_preference("browser.download.alwaysOpenPanel", False)
-opts.set_preference("browser.download.manager.showWhenStarting", False)
-opts.set_preference("extensions.originControls.grantByDefault", True)
-driver = webdriver.Firefox(options=opts, service=Service(env=ENV))
-driver.set_window_size(1100, 760)
-driver.install_addon(str(ext), temporary=True)
-driver.set_script_timeout(90)
-print("Firefox", driver.capabilities.get("browserVersion"))
+    opts = Options()
+    opts.add_argument("-headless")
+    opts.set_preference("extensions.webextensions.uuids", json.dumps({GECKO_ID: UUID}))
+    opts.set_preference("browser.download.folderList", 2)
+    opts.set_preference("browser.download.dir", str(DL))
+    opts.set_preference("browser.download.useDownloadDir", True)
+    opts.set_preference("browser.download.alwaysOpenPanel", False)
+    opts.set_preference("browser.download.manager.showWhenStarting", False)
+    opts.set_preference("extensions.originControls.grantByDefault", True)
+    driver = webdriver.Firefox(options=opts, service=Service(env=ENV))
+    driver.set_window_size(1100, 760)
+    driver.install_addon(str(ext), temporary=True)
+    driver.set_script_timeout(90)
+    print("Firefox", driver.capabilities.get("browserVersion"))
 
-driver.get(BASE + "/evidence")
-page_window = driver.current_window_handle
-driver.switch_to.new_window("window")
-driver.get(f"moz-extension://{UUID}/popup.html")
-popup_window = driver.current_window_handle
+    driver.get(BASE + "/evidence")
+    page_window = driver.current_window_handle
+    driver.switch_to.new_window("window")
+    driver.get(f"moz-extension://{UUID}/popup.html")
+    popup_window = driver.current_window_handle
+
+
+
+
+try:
+    setup()
+except Exception:  # noqa: BLE001 - report why the browser could not start
+    print(f"::error title=firefox setup::{esc(traceback.format_exc()[-3500:])}")
+    sys.exit(1)
+print(f"::notice title=Firefox::{driver.capabilities.get('browserVersion')}")
 
 
 def call(cmd, **args):

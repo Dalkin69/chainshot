@@ -291,6 +291,16 @@ def browser_link_host_protocol():
 
 
 @test
+def browser_link_firefox_launch():
+    import struct
+    data = json.dumps({"type": "hello"}).encode()
+    p = subprocess.run([str(EXE), str(CONFIG / "com.chainshot.host.firefox.json"), "chainshot@dalkin69"],
+                       input=struct.pack("<I", len(data)) + data, capture_output=True, timeout=60, env=ENV)
+    (n,) = struct.unpack("<I", p.stdout[:4])
+    assert json.loads(p.stdout[4:4 + n])["ok"] is True, p.stdout
+
+
+@test
 def browser_link_registration():
     import winreg
     code, out = run("register-browser", "--extension-id", "abcdefghijklmnopabcdefghijklmnop")
@@ -302,6 +312,9 @@ def browser_link_registration():
         assert Path(m["path"]) == EXE, m
         assert "chrome-extension://dcccfnbiglhpbcdhbmokfilfgpfnmikf/" in m["allowed_origins"], m
         assert "chrome-extension://abcdefghijklmnopabcdefghijklmnop/" in m["allowed_origins"], m
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Mozilla\NativeMessagingHosts\com.chainshot.host") as k:
+            ff = json.loads(Path(winreg.QueryValueEx(k, "")[0]).read_text(encoding="utf-8"))
+        assert ff["allowed_extensions"] == ["chainshot@dalkin69"] and Path(ff["path"]) == EXE, ff
     finally:
         run("register-browser", "--remove")
     try:
@@ -387,6 +400,31 @@ def demo_case_screenshot():
     code, out = run("--smoke-test", OUT / "app-altered.png", "--case", bad, timeout=120)
     info = json.loads(out.strip().splitlines()[-1])
     assert "FAILED" in info["chip"] or "ALTERED" in info["chip"], info
+
+
+@test
+def uninstall_removes_what_the_app_added():
+    import winreg
+    run("register-browser")
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run") as k:
+        winreg.SetValueEx(k, "ChainShot", 0, winreg.REG_SZ, f'"{EXE}" --minimized')
+    code, out = run("uninstall")
+    assert "Case folders were not touched" in out, out
+    for key in (r"Software\Google\Chrome\NativeMessagingHosts\com.chainshot.host",
+                r"Software\Mozilla\NativeMessagingHosts\com.chainshot.host"):
+        try:
+            winreg.OpenKey(winreg.HKEY_CURRENT_USER, key)
+            raise AssertionError(f"{key} still present")
+        except FileNotFoundError:
+            pass
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run") as k:
+        try:
+            winreg.QueryValueEx(k, "ChainShot")
+            raise AssertionError("Run value still present")
+        except FileNotFoundError:
+            pass
+    assert not (CONFIG / "state.json").exists(), "settings removed"
+    assert (CASE / "journal.jsonl").exists(), "cases untouched"
 
 
 failed = [(n, tb) for n, tb in results if tb]

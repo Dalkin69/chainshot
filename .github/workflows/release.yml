@@ -33,7 +33,7 @@ jobs:
           mkdir -p dist/ps/ChainShot
           cp -r windows/ChainShot/* dist/ps/ChainShot/
           cp python/chainshot.py dist/ps/ChainShot/
-          cp windows/Install-ChainShot.ps1 windows/README.md LICENSE PRIVACY.md dist/ps/
+          cp windows/Install-ChainShot.ps1 windows/Uninstall-ChainShot.ps1 windows/README.md LICENSE PRIVACY.md dist/ps/
           (cd dist/ps && zip -qr "../chainshot-powershell-${v}.zip" .)
           # Browser extension: Chromium (unpacked), Chrome Web Store / Edge Add-ons, Firefox (AMO).
           python3 tools/build_extension.py --out dist --zip "$v"
