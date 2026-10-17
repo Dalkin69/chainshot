@@ -163,6 +163,7 @@ class TestNativeHost(WithConfig):
         m = json.loads((d / "com.chainshot.host.json").read_text())
         self.assertEqual(m["name"], "com.chainshot.host")
         self.assertIn("chrome-extension://dcccfnbiglhpbcdhbmokfilfgpfnmikf/", m["allowed_origins"])
+        self.assertIn("chrome-extension://ejbdnnlgcnogepeclpknfagfhehkhgap/", m["allowed_origins"])  # Chrome Web Store
         self.assertIn("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", m["allowed_origins"])
         self.assertTrue(os.access(m["path"], os.X_OK))
         self.assertEqual(run("register-browser", "--dir", d, "--remove"), 0)

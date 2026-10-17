@@ -4,7 +4,6 @@ Manifest V3 extension for Chromium browsers (Chrome, Edge, Brave, Vivaldi; Chrom
 This folder is the Chromium version; `python tools/build_extension.py` builds the store and Firefox packages.
 
 1. `chrome://extensions` (or `edge://extensions`) > enable **Developer mode** > **Load unpacked** > select this folder.
-   (Store versions: see [docs/publishing-extension.md](../docs/publishing-extension.md).)
    Firefox: `about:debugging` > *This Firefox* > *Load Temporary Add-on* > the Firefox zip of a release.
 2. Click the ChainShot icon, create a case, capture with the button or `Alt+Shift+S`
    (change it at `chrome://extensions/shortcuts`). **Full page** scrolls and stitches the whole page;

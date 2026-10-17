@@ -1,5 +1,7 @@
 # Privacy
 
+Also on the website: [English](https://dalkin69.github.io/chainshot/privacy.html), [français](https://dalkin69.github.io/chainshot/fr/privacy.html).
+
 ChainShot is a forensic tool: what it records belongs to you and to your case, and nobody else.
 This page applies to every component: the Windows app (`ChainShot.exe`), the PowerShell module,
 `chainshot.py` and the browser extension. It is also the privacy policy of the extension in browser stores.

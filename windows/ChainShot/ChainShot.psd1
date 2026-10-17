@@ -1,6 +1,6 @@
 @{
     RootModule           = 'ChainShot.psm1'
-    ModuleVersion        = '1.3.0'
+    ModuleVersion        = '1.3.1'
     GUID                 = '7d3c1f0e-5b8a-4f62-9a51-2c4e8b6f0d13'
     Author               = 'Dalkin69'
     Copyright            = '(c) 2026 Dalkin69. MIT License.'
