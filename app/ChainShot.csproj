@@ -12,7 +12,7 @@
     <RootNamespace>ChainShot</RootNamespace>
     <ApplicationIcon>..\windows\ChainShot\chainshot.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>ChainShot</Product>
     <Company>ChainShot contributors</Company>
     <Copyright>Copyright (c) 2026 Dalkin69 - MIT License</Copyright>
@@ -27,6 +27,12 @@
   <ItemGroup>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The independent verifier, written into evidence packages (Package.cs). -->
+    <EmbeddedResource Include="..\python\chainshot.py" LogicalName="chainshot.py" />
   </ItemGroup>
   <ItemGroup>
     <!-- Lets `dotnet build` work without the .NET Framework developer pack. -->

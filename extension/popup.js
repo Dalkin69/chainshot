@@ -18,7 +18,39 @@ function busy(button, on) {
   button.disabled = on;
 }
 
+function renderDestination(dest) {
+  for (const b of [$('destDownloads'), $('destApp')]) b.setAttribute('aria-pressed', String(b.dataset.dest === dest));
+  for (const el of document.querySelectorAll('.browser-only')) el.hidden = dest === 'app';
+  $('caseSelectLabel').hidden = dest === 'app';
+  document.body.classList.toggle('app-mode', dest === 'app');
+}
+
+function renderApp(st) {
+  const app = st.app || { connected: false, error: '' };
+  const ready = app.connected && app.case;
+  $('newCase').hidden = true;
+  $('main').hidden = !ready;
+  $('appLink').hidden = Boolean(ready);
+  if (!app.connected) {
+    $('caseLine').textContent = 'ChainShot app not connected';
+    $('appText').textContent = app.error;
+  } else if (!app.case) {
+    $('caseLine').textContent = 'No case open in ChainShot';
+    $('appText').textContent = app.warning || 'Open or create a case in ChainShot, then try again.';
+  } else {
+    $('caseLine').textContent = `${app.case.name} - ${app.case.entries} entries (ChainShot app)`;
+    $('tag').value = app.tag || '';
+    $('note').value = st.settings.nextNote || '';
+    $('folder').textContent = `Saved in the ChainShot case: ${app.case.path}`;
+    $('last').hidden = true;
+  }
+}
+
 function render(st) {
+  const dest = st.settings.destination || 'downloads';
+  renderDestination(dest);
+  if (dest === 'app') { renderApp(st); return; }
+  $('appLink').hidden = true;
   const hasCase = Boolean(st.case);
   $('newCase').hidden = hasCase;
   $('main').hidden = !hasCase;
@@ -68,6 +100,13 @@ async function init() {
     } catch (e) { say(e.message, 'bad'); } finally { busy($('createCase'), false); }
   });
   $('cancelCase').addEventListener('click', refresh);
+  for (const b of [$('destDownloads'), $('destApp')]) {
+    b.addEventListener('click', async () => {
+      say('');
+      render(await call('setSettings', { destination: b.dataset.dest }));
+    });
+  }
+  $('retryApp').addEventListener('click', () => refresh().catch((e) => say(e.message, 'bad')));
   $('showNewCase').addEventListener('click', () => { $('main').hidden = true; $('newCase').hidden = false; });
 
   $('tag').addEventListener('change', () => call('setSettings', { tag: $('tag').value.trim() }).catch((e) => say(e.message, 'bad')));
@@ -82,7 +121,7 @@ async function init() {
       const e = await call('capture', { note: $('note').value });
       $('note').value = '';
       await refresh();
-      say(`#${e.seq} saved and chained.`, 'ok');
+      say(e.destination === 'app' ? `#${e.seq} saved in the ChainShot case.` : `#${e.seq} saved and chained.`, 'ok');
     } catch (e) { say(e.message, 'bad'); } finally { busy($('capture'), false); }
   });
 

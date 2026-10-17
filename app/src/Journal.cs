@@ -195,13 +195,14 @@ namespace ChainShot
             return full;
         }
 
-        /// <summary>Appends an entry; seq, utc, identity fields and chain are computed here.</summary>
-        public JsonObject Append(IDictionary<string, string> fields, JsonObject extra, DateTime? utcNow = null)
+        /// <summary>Appends an entry; seq, utc, identity fields and chain are computed here.
+        /// <paramref name="locked"/>: the caller already holds <see cref="Lock"/>.</summary>
+        public JsonObject Append(IDictionary<string, string> fields, JsonObject extra, DateTime? utcNow = null, bool locked = false)
         {
             string type;
             if (!fields.TryGetValue("type", out type) || Array.IndexOf(Format.EntryTypes, type) < 0)
                 throw new ArgumentException("Unknown entry type: " + type);
-            using (AcquireLock())
+            using (locked ? null : Lock())
             {
                 var existing = ReadEntries();
                 string prev = existing.Count > 0 ? existing[existing.Count - 1].Str("chain") : Format.Genesis;
@@ -224,7 +225,8 @@ namespace ChainShot
             }
         }
 
-        IDisposable AcquireLock()
+        /// <summary>Exclusive lock on .journal.lock, shared with chainshot.py and the PowerShell module.</summary>
+        public IDisposable Lock()
         {
             string lockPath = Path.Combine(Root, ".journal.lock");
             for (int i = 0; i < 50; i++)
@@ -404,11 +406,29 @@ namespace ChainShot
         public int Entries;
         public string TimestampTime;
         public string TimestampError;
+        /// <summary>Local clock minus the TSA time, in seconds (positive: this computer is ahead).</summary>
+        public double? ClockOffset;
     }
 
     public static class Sealer
     {
         public const string DefaultTsa = "https://freetsa.org/tsr";
+        public const double ClockWarnSeconds = 60;
+
+        /// <summary>Same rule as chainshot.py: local clock minus TSA time, rounded to 0.1 s.</summary>
+        public static double? ClockOffset(string genTime, DateTime utcNow)
+        {
+            DateTime t;
+            if (!DateTime.TryParse(genTime, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out t)) return null;
+            return Math.Round((utcNow - t).TotalSeconds, 1, MidpointRounding.AwayFromZero);
+        }
+
+        public static string TimestampNote(string genTime, double? offset)
+        {
+            string note = "RFC 3161 time " + genTime;
+            if (offset.HasValue) note += " (local clock " + offset.Value.ToString("+0.0;-0.0;+0.0", CultureInfo.InvariantCulture) + " s)";
+            return note;
+        }
 
         /// <summary>Seals the journal; with tsaUrl, also requests an RFC 3161 timestamp.
         /// A failed timestamp leaves a valid local seal and is reported in TimestampError.</summary>
@@ -451,6 +471,7 @@ namespace ChainShot
                     for (int i = 0; i < 32; i++) digest[i] = Convert.ToByte(d.Sha256.Substring(2 * i, 2), 16);
                     byte[] tsr = Rfc3161.Request(tsaUrl, digest);
                     var info = Rfc3161.ParseResponse(tsr);
+                    double? offset = ClockOffset(info.GenTime, DateTime.UtcNow);
                     if (info.HashedMessage != d.Sha256) throw new InvalidDataException("TSA answered for a different hash");
                     string tsrPath = Path.Combine(dir, name + ".tsr");
                     File.WriteAllBytes(tsrPath, tsr);
@@ -459,9 +480,10 @@ namespace ChainShot
                     {
                         { "type", "timestamp" }, { "tag", tag ?? "SEAL" }, { "file", "seals/" + name + ".tsr" },
                         { "size", td.Size.ToString(CultureInfo.InvariantCulture) }, { "sha256", td.Sha256 },
-                        { "url", tsaUrl }, { "note", "RFC 3161 time " + info.GenTime },
+                        { "url", tsaUrl }, { "note", TimestampNote(info.GenTime, offset) },
                     }, null);
                     result.TimestampTime = info.GenTime;
+                    result.ClockOffset = offset;
                 }
                 catch (Exception ex) { result.TimestampError = ex.Message; }
             }

@@ -25,7 +25,17 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'chainshot-ext-'));
 const extDir = path.join(tmp, 'extension');
 const profile = path.join(tmp, 'profile');
 const downloads = path.join(tmp, 'downloads');
+const config = path.join(tmp, 'config'); // CHAINSHOT_CONFIG_DIR of the native host (state.json)
+const appCase = path.join(tmp, 'app-case');
 let context; let server; let sw; let pageUrl;
+
+function py(...args) {
+  const r = spawnSync(PYTHON, [path.join(ROOT, 'python', 'chainshot.py'), ...args], {
+    encoding: 'utf8', env: { ...process.env, CHAINSHOT_CONFIG_DIR: config },
+  });
+  assert.equal(r.status, 0, (r.stdout || '') + (r.stderr || ''));
+  return r.stdout;
+}
 
 function pyVerify(dir) {
   const r = spawnSync(PYTHON, [path.join(ROOT, 'python', 'chainshot.py'), 'verify', dir], { encoding: 'utf8' });
@@ -52,6 +62,10 @@ before(async () => {
     savefile: { default_directory: downloads },
   }));
 
+  // Browser link: chainshot.py is the native messaging host (ChainShot.exe on Windows).
+  // Chromium reads user-level host manifests from <profile>/NativeMessagingHosts.
+  py('register-browser', '--dir', path.join(profile, 'NativeMessagingHosts'));
+
   server = createServer((_req, res) => {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end('<!doctype html><title>Evidence page é</title><body style="margin:0;background:#2b4c7e;color:#fff;font:40px sans-serif">' +
@@ -66,6 +80,7 @@ before(async () => {
     acceptDownloads: true,
     executablePath: process.env.CHAINSHOT_CHROMIUM || undefined,
     viewport: { width: 1000, height: 700 },
+    env: { ...process.env, CHAINSHOT_CONFIG_DIR: config },
     args: [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`],
   });
   // Give downloads back to the browser and its profile preferences: Playwright would
@@ -148,4 +163,60 @@ test('the popup renders the active case', async () => {
   await popup.waitForFunction(() => document.getElementById('message').textContent.length > 0);
   assert.match(await popup.textContent('#message'), /Chain intact \(3 entries\)/);
   await popup.close();
+});
+
+test('app destination: reports when no case is selected', async () => {
+  const st = await sw.evaluate(() => globalThis.chainshot.setSettings({ destination: 'app' }));
+  assert.equal(st.app.connected, true, JSON.stringify(st.app));
+  assert.equal(st.app.case, null);
+  await assert.rejects(sw.evaluate(() => globalThis.chainshot.capture({})), /No case|no current case/i);
+});
+
+test('app destination: captures go into the current case of the app', async () => {
+  py('init', appCase, '--case', 'APP-LINK', '--examiner', 'Analyst');
+  py('use', appCase);
+  let st = await sw.evaluate(() => globalThis.chainshot.setSettings({ tag: 'A1' }));
+  assert.equal(st.app.case.name, 'APP-LINK');
+  assert.equal(st.app.tag, 'A1', 'the tag is sent to the app');
+  const entry = await sw.evaluate(() => globalThis.chainshot.capture({ note: 'linked capture' }));
+  assert.equal(entry.seq, '2');
+  assert.equal(entry.destination, 'app');
+  py('note', appCase, 'note written by another tool between two captures');
+  const second = await sw.evaluate(() => globalThis.chainshot.capture({}));
+  assert.equal(second.seq, '4', 'numbering follows the journal of the app');
+  await sw.evaluate(() => globalThis.chainshot.addNote({ text: 'observation from the browser' }));
+
+  const lines = fs.readFileSync(path.join(appCase, 'journal.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(lines.length, 5);
+  const e = lines[1];
+  assert.equal(e.type, 'browser');
+  assert.equal(e.tag, 'A1');
+  assert.equal(e.url, pageUrl);
+  assert.equal(e.title, 'Evidence page é');
+  assert.equal(e.note, 'linked capture');
+  assert.match(e.source, /^chainshot-ext\//);
+  assert.match(e.extra.via, /^chainshot-py\//);
+  assert.match(e.file, /^captures\/0002_\d{8}T\d{9}Z_A1\.png$/);
+  assert.equal(lines[4].tag, 'A1');
+  const { width, height } = pngSize(path.join(appCase, e.file));
+  const [shotW, shotH] = e.extra.viewport.split('x').map(Number);
+  assert.equal(width, shotW);
+  assert.ok(height > shotH, 'banner below the page');
+
+  const r = await sw.evaluate(() => globalThis.chainshot.verify());
+  assert.equal(r.ok, true, JSON.stringify(r.problems));
+  assert.equal(r.count, 5);
+  const ok = pyVerify(appCase);
+  assert.equal(ok.code, 0, ok.out);
+
+  const id = new URL(sw.url()).host;
+  assert.equal(id, 'dcccfnbiglhpbcdhbmokfilfgpfnmikf', 'the manifest key fixes the extension ID');
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${id}/popup.html`);
+  await popup.waitForFunction(() => document.getElementById('caseLine').textContent.includes('ChainShot app'));
+  assert.match(await popup.textContent('#caseLine'), /APP-LINK - 5 entries \(ChainShot app\)/);
+  assert.equal(await popup.getAttribute('#destApp', 'aria-pressed'), 'true');
+  await popup.close();
+  st = await sw.evaluate(() => globalThis.chainshot.setSettings({ destination: 'downloads' }));
+  assert.equal(st.app, null);
 });

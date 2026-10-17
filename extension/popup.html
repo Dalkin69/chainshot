@@ -14,6 +14,18 @@
     </div>
   </header>
 
+  <div class="seg" role="group" aria-label="Where captures are saved">
+    <button id="destDownloads" data-dest="downloads" title="Case folder in your Downloads folder, managed by the extension">This browser</button>
+    <button id="destApp" data-dest="app" title="The case open in the ChainShot app (Windows) or chainshot.py">ChainShot app</button>
+  </div>
+
+  <section id="appLink" class="card" hidden>
+    <p id="appText"></p>
+    <p class="muted small">Windows: start <b>ChainShot.exe</b> once; it registers the link (Options &gt; Browser link).
+      Linux, macOS: <code>python3 chainshot.py register-browser</code>, then <code>chainshot.py use &lt;case&gt;</code>.</p>
+    <button id="retryApp" class="link">Try again</button>
+  </section>
+
   <section id="newCase" hidden>
     <h2>New case</h2>
     <label>Case name or reference<input id="caseName" placeholder="TP Forensic - PC-COMPTA01" autocomplete="off"></label>
@@ -28,7 +40,7 @@
   <section id="main" hidden>
     <div class="grid">
       <label>Tag<input id="tag" placeholder="P17" autocomplete="off"></label>
-      <label>Case<select id="caseSelect"></select></label>
+      <label id="caseSelectLabel">Case<select id="caseSelect"></select></label>
     </div>
     <label>Note <span class="muted">(used once, then cleared)</span><textarea id="note" rows="2" placeholder="What this capture shows"></textarea></label>
     <div class="row">
@@ -38,8 +50,8 @@
     <div id="last" class="card" hidden></div>
     <div class="row tools">
       <button id="verify" class="link">Verify chain</button>
-      <button id="rewrite" class="link">Rewrite journal file</button>
-      <button id="showNewCase" class="link">New case</button>
+      <button id="rewrite" class="link browser-only">Rewrite journal file</button>
+      <button id="showNewCase" class="link browser-only">New case</button>
     </div>
     <p id="folder" class="muted small"></p>
   </section>

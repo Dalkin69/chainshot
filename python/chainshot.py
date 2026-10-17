@@ -17,7 +17,10 @@ Commands
   seal        seal the journal (optionally with an RFC 3161 timestamp)
   report      generate a self-contained HTML report
   export-csv  export the journal as CSV (read-only view, never re-imported)
+  package     zip a case for delivery, with chainshot.py and verification instructions
   tsr-info    print the content of an RFC 3161 timestamp response
+  use, tag    show or set the current case and tag (shared with ChainShot.exe and the module)
+  register-browser  let the browser extension save captures into the current case
 
 Exit codes: 0 = everything verified, 1 = verification problem, 2 = usage or I/O error.
 """
@@ -32,15 +35,20 @@ import hashlib
 import html
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
 import subprocess
 import sys
+import struct
+import time
 import urllib.request
+import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 TOOL_ID = f"chainshot-py/{__version__}"
 
 # --------------------------------------------------------------------------- #
@@ -147,12 +155,54 @@ class Case:
         return p if p.is_absolute() else self.root / p
 
     # -- writing ----------------------------------------------------------- #
-    def append(self, fields: dict, extra: dict | None = None) -> dict:
-        """Append an entry, computing seq and chain. Returns the stored entry."""
+    @contextmanager
+    def lock(self, timeout: float = 10.0):
+        """Exclusive lock on <case>/.journal.lock, shared with ChainShot.exe and the
+        PowerShell module, so that two tools never append at the same time."""
+        path = self.root / ".journal.lock"
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                fh = open(path, "a+b")
+                try:
+                    if os.name == "nt":
+                        import msvcrt
+                        fh.seek(0)
+                        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError:
+                    fh.close()
+                    raise
+                break
+            except OSError:  # held by another process (or opened exclusively by ChainShot.exe)
+                if time.monotonic() > deadline:
+                    raise ChainShotError(f"journal is locked by another program: {path}")
+                time.sleep(0.1)
+        try:
+            yield
+        finally:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+            fh.close()
+
+    def append(self, fields: dict, extra: dict | None = None, when: _dt.datetime | None = None,
+               locked: bool = False) -> dict:
+        """Append an entry, computing seq and chain. Returns the stored entry.
+        `locked` = the caller already holds self.lock()."""
+        if not locked:
+            with self.lock():
+                return self.append(fields, extra, when, locked=True)
         existing = self.entries()
         prev = existing[-1]["chain"] if existing else GENESIS
         meta = self.meta()
-        now = utc_now()
+        now = when or utc_now()
         entry = {k: "" for k in CHAINED_FIELDS}
         entry.update({
             "v": FORMAT_VERSION,
@@ -601,11 +651,39 @@ def cmd_seal(args) -> int:
         tsr_path = seal_path.with_suffix(".tsr")
         tsr_path.write_bytes(tsr)
         tsr_sha, _, tsr_size = file_hashes(tsr_path)
+        offset = clock_offset(info["gen_time"])
         case.append({"type": "timestamp", "tag": args.tag, "file": f"seals/{tsr_path.name}", "size": str(tsr_size),
-                     "sha256": tsr_sha, "url": args.tsa, "note": f"RFC 3161 time {info['gen_time']}"})
+                     "sha256": tsr_sha, "url": args.tsa, "note": timestamp_note(info["gen_time"], offset)})
         print(f"RFC 3161 timestamp: {info['gen_time']} (TSA {args.tsa}, serial {info['serial']})")
+        if offset is not None:
+            print(f"Local clock offset vs the TSA: {offset:+.1f} s")
+            if abs(offset) > CLOCK_WARN_SECONDS:
+                print(f"WARNING: this computer's clock is off by {offset:+.0f} s: entry times are shifted accordingly.",
+                      file=sys.stderr)
     print("Write the seal SHA-256 in your signed report or send it to your client separately.")
     return 0
+
+
+CLOCK_WARN_SECONDS = 60
+
+
+def clock_offset(gen_time: str, now: _dt.datetime | None = None) -> float | None:
+    """Local clock minus the TSA time, in seconds (positive: this computer is ahead).
+    Measured when the response arrives, so it includes the network delay (small)."""
+    try:
+        t = _dt.datetime.strptime(gen_time.rstrip("Z").split(".")[0], "%Y-%m-%dT%H:%M:%S")
+        frac = gen_time.rstrip("Z").split(".")[1] if "." in gen_time else ""
+        t = t.replace(tzinfo=_dt.timezone.utc) + _dt.timedelta(seconds=float("0." + frac) if frac else 0)
+    except (ValueError, IndexError):
+        return None
+    return round(((now or utc_now()) - t).total_seconds(), 1)
+
+
+def timestamp_note(gen_time: str, offset: float | None) -> str:
+    note = f"RFC 3161 time {gen_time}"
+    if offset is not None:
+        note += f" (local clock {offset:+.1f} s)"
+    return note
 
 
 def cmd_export_csv(args) -> int:
@@ -716,6 +794,353 @@ def cmd_report(args) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# Current case and tag (state.json, shared with ChainShot.exe and the module)
+# --------------------------------------------------------------------------- #
+def config_dir() -> Path:
+    if os.environ.get("CHAINSHOT_CONFIG_DIR"):
+        return Path(os.environ["CHAINSHOT_CONFIG_DIR"])
+    if os.name == "nt" and os.environ.get("APPDATA"):
+        return Path(os.environ["APPDATA"]) / "ChainShot"
+    return Path.home() / ".config" / "chainshot"
+
+
+def load_state() -> dict:
+    try:
+        data = json.loads((config_dir() / "state.json").read_text(encoding="utf-8-sig"))
+        return {"CasePath": str(data.get("CasePath") or ""), "Tag": str(data.get("Tag") or "")}
+    except (OSError, ValueError, AttributeError):
+        return {"CasePath": "", "Tag": ""}
+
+
+def save_state(state: dict) -> None:
+    config_dir().mkdir(parents=True, exist_ok=True)
+    (config_dir() / "state.json").write_text(json.dumps({"CasePath": state.get("CasePath", ""), "Tag": state.get("Tag", "")},
+                                                        indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def current_case() -> Case:
+    path = load_state()["CasePath"]
+    if not path:
+        raise ChainShotError("no current case: open one in ChainShot or run 'chainshot use <case folder>'")
+    case = Case(Path(path))
+    if not (case.root / CASE_FILE).exists():
+        raise ChainShotError(f"the current case is not a ChainShot case folder: {path}")
+    return case
+
+
+def cmd_use(args) -> int:
+    st = load_state()
+    if args.case_dir:
+        root = Path(args.case_dir).resolve()
+        if not (root / CASE_FILE).exists():
+            raise ChainShotError(f"not a ChainShot case folder (no {CASE_FILE}): {root}")
+        st["CasePath"] = str(root)
+        save_state(st)
+    print(f"Current case: {st['CasePath'] or '(none)'}")
+    return 0
+
+
+def cmd_tag(args) -> int:
+    st = load_state()
+    if args.tag is not None:
+        st["Tag"] = args.tag.strip()
+        save_state(st)
+    print(f"Current tag: {st['Tag']}")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# Evidence package: the case, this verifier and instructions in one zip
+# --------------------------------------------------------------------------- #
+VERIFY_TEXT = """ChainShot evidence package
+==========================
+
+Case        : {case}
+Examiner    : {examiner}
+Packaged    : {utc} by {tool}
+Journal     : {entries} entries
+              SHA-256 of journal.jsonl: {journal_sha}
+{seal_block}
+How to verify (Python 3.9 or later, nothing to install)
+-------------------------------------------------------
+1. Check that no file of this package changed:
+       sha256sum -c SHA256SUMS.txt                (Linux, macOS, Git Bash)
+       Get-FileHash -Algorithm SHA256 <file>      (Windows PowerShell)
+2. Check the evidence, the hash chain and the seals:
+       python chainshot.py verify "{folder}"
+   The last line must read: RESULT: ALL EVIDENCE INTACT
+3. Compare the seal SHA-256 above with the one written in the signed report
+   or sent separately by the examiner. They must be identical.
+{tsa_hint}
+Documentation: https://github.com/Dalkin69/chainshot/blob/main/docs/verification.md
+
+---
+
+Verification (Python 3.9+, rien a installer) : 1) sha256sum -c SHA256SUMS.txt
+2) python chainshot.py verify "{folder}" doit afficher RESULT: ALL EVIDENCE INTACT
+3) le SHA-256 du scelle ci-dessus doit etre celui du rapport signe.
+"""
+
+
+def last_seal(case: Case):
+    """(entry of the last seal, entry of its timestamp or None)."""
+    seal, ts = None, None
+    for e in case.entries():
+        if e.get("type") == "seal":
+            seal, ts = e, None
+        elif e.get("type") == "timestamp" and seal is not None:
+            ts = e
+    return seal, ts
+
+
+def build_package(case: Case, out: Path, verifier: Path) -> tuple[Path, str]:
+    """Writes the zip and returns (path, sha256). The case must verify."""
+    res = verify_case(case)
+    if not res.ok:
+        raise ChainShotError("the case does not verify; fix it before packaging (run verify)")
+    meta = case.meta()
+    entries = case.entries()
+    seal, ts = last_seal(case)
+    if seal:
+        seal_block = (f"Last seal   : {seal['file']} (entries 1-{int(seal['seq']) - 1})\n"
+                      f"              SHA-256: {seal['sha256']}\n")
+        if ts:
+            seal_block += f"              {ts.get('note', '')} - TSA {ts.get('url', '')}\n"
+        if int(seal["seq"]) < len(entries) - (1 if ts else 0):
+            seal_block += "              (entries were added after this seal)\n"
+    else:
+        seal_block = "Last seal   : none - the examiner did not seal this journal\n"
+    folder = case.root.resolve().name
+    now = utc_now()
+    text = VERIFY_TEXT.format(
+        case=meta.get("case", ""), examiner=meta.get("examiner", ""), utc=fmt_utc(now), tool=TOOL_ID,
+        entries=len(entries), journal_sha=sha256_hex(case.journal.read_bytes()), seal_block=seal_block, folder=folder,
+        tsa_hint=("   For the RFC 3161 timestamp signature: python chainshot.py verify \"{0}\" --tsa-ca <TSA CA .pem>\n".format(folder)
+                  if ts else ""),
+    )
+    files = sorted(p for p in case.root.rglob("*") if p.is_file() and p.name != ".journal.lock")
+    sums = []
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(out.name + ".part")
+    with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        for f in files:
+            arc = f"{folder}/{f.relative_to(case.root).as_posix()}"
+            z.write(f, arc)
+            sums.append(f"{file_hashes(f)[0]}  {arc}")
+        vbytes = verifier.read_bytes()
+        z.writestr("chainshot.py", vbytes)
+        sums.append(f"{sha256_hex(vbytes)}  chainshot.py")
+        tbytes = text.replace("\n", "\r\n").encode("utf-8")
+        z.writestr("VERIFY.txt", tbytes)
+        sums.append(f"{sha256_hex(tbytes)}  VERIFY.txt")
+        z.writestr("SHA256SUMS.txt", "\n".join(sums) + "\n")
+    os.replace(tmp, out)
+    return out, file_hashes(out)[0]
+
+
+def cmd_package(args) -> int:
+    case = _require_case(args.case_dir)
+    if args.seal or args.tsa:
+        rc = cmd_seal(argparse.Namespace(case_dir=args.case_dir, tsa=args.tsa, tag="SEAL"))
+        if rc not in (0,) and not (args.tsa and rc == 1 and last_seal(case)[0]):
+            return rc
+    name = f"{case.root.resolve().name}-package-{utc_now().strftime('%Y%m%dT%H%M%SZ')}.zip"
+    out = Path(args.output) if args.output else case.root.resolve().parent / name
+    path, sha = build_package(case, out, Path(__file__).resolve())
+    case.append({"type": "note", "tag": "PACKAGE", "note": f"Package created: {path.name} SHA-256 {sha}"})
+    print(f"Package written: {path}\n    SHA-256 {sha}\nSend this SHA-256 to the recipient by another channel (or put it in your report).")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# Browser link: the extension saves captures into the current case
+# (Chrome native messaging, see docs/browser-link.md)
+# --------------------------------------------------------------------------- #
+HOST_NAME = "com.chainshot.host"
+HOST_PROTOCOL = 1
+# Extension IDs allowed to talk to the host: the ID fixed by the "key" of extension/manifest.json
+# (unpacked install), then the store IDs once published.
+EXTENSION_IDS = ("dcccfnbiglhpbcdhbmokfilfgpfnmikf",)
+MAX_PNG_BYTES = 60 * 1024 * 1024
+_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
+
+
+def _host_case_info(case: Case | None) -> dict:
+    st = load_state()
+    info = {"ok": True, "protocol": HOST_PROTOCOL, "tool": TOOL_ID, "host": socket.gethostname(), "tag": st["Tag"], "case": None}
+    if case is not None:
+        entries = case.entries()
+        meta = case.meta()
+        info["case"] = {
+            "name": meta.get("case", ""), "path": str(case.root.resolve()), "examiner": meta.get("examiner", ""),
+            "entries": len(entries), "next_seq": len(entries) + 1,
+            "next_capture": sum(e.get("type") in ("screenshot", "browser") for e in entries) + 1,
+        }
+    return info
+
+
+def host_handle(msg: dict) -> dict:
+    kind = msg.get("type")
+    if kind == "hello":
+        try:
+            return _host_case_info(current_case())
+        except ChainShotError as exc:
+            info = _host_case_info(None)
+            info["warning"] = str(exc)
+            return info
+    if kind == "set_tag":
+        st = load_state()
+        st["Tag"] = sanitize(msg.get("tag", "")).strip()
+        save_state(st)
+        return {"ok": True, "tag": st["Tag"]}
+    case = current_case()
+    if kind == "note":
+        text = sanitize(msg.get("text", "")).strip()
+        if not text:
+            raise ChainShotError("empty note")
+        e = case.append({"type": "note", "tag": msg.get("tag", load_state()["Tag"]), "note": text,
+                         "source": sanitize(msg.get("source", "")) or TOOL_ID}, {"via": TOOL_ID})
+        return {"ok": True, "entry": {k: e[k] for k in ("seq", "utc", "chain")}}
+    if kind == "verify":
+        res = verify_case(case)
+        problems = [f"#{r['seq']}: {' / '.join(r['problems'])}" for r in res.rows if not r["ok"]]
+        problems += [f"{x['file']}: {' / '.join(x['problems'])}" for x in res.seals if not x["ok"]] + res.errors
+        return {"ok": True, "intact": res.ok, "entries": len(res.rows), "seals": len(res.seals), "problems": problems[:20]}
+    if kind == "capture":
+        import base64
+        data = base64.b64decode(msg.get("png_base64", ""), validate=True)
+        if not data.startswith(b"\x89PNG\r\n\x1a\n") or len(data) > MAX_PNG_BYTES:
+            raise ChainShotError("the capture is not a PNG image (or is too large)")
+        when = utc_now()
+        utc = str(msg.get("utc", ""))
+        if _UTC_RE.match(utc):
+            t = _dt.datetime.strptime(utc, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=_dt.timezone.utc)
+            if abs((t - when).total_seconds()) <= 600:  # capture time, if the browser clock agrees with ours
+                when = t
+        tag = sanitize(msg.get("tag", ""))
+        with case.lock():
+            entries = case.entries()
+            seq = len(entries) + 1
+            if str(msg.get("expected_seq", "")) != str(seq):
+                info = _host_case_info(case)
+                info.update(ok=False, retry=True, error=f"the journal changed (next entry is #{seq})")
+                return info
+            safe_tag = re.sub(r"[^\w\-]", "_", tag) or "untagged"
+            stamp = when.strftime("%Y%m%dT%H%M%S") + f"{when.microsecond // 1000:03d}Z"
+            name = f"{seq:04d}_{stamp}_{safe_tag}.png"
+            (case.root / "captures").mkdir(exist_ok=True)
+            target = case.root / "captures" / name
+            with open(target, "xb") as fh:
+                fh.write(data)
+            sha, md5, size = file_hashes(target)
+            extra = {k: sanitize(v) for k, v in (msg.get("extra") or {}).items() if k in ("viewport", "user_agent", "mode")}
+            extra.update(md5=md5, via=TOOL_ID)
+            e = case.append({"type": "browser", "tag": tag, "file": f"captures/{name}", "size": str(size), "sha256": sha,
+                             "url": msg.get("url", ""), "title": msg.get("title", ""), "note": msg.get("note", ""),
+                             "source": sanitize(msg.get("source", "")) or TOOL_ID}, extra, when, locked=True)
+        return {"ok": True, "entry": {k: e[k] for k in ("seq", "utc", "file", "sha256", "chain")}}
+    raise ChainShotError(f"unknown message type: {kind!r}")
+
+
+def native_read(stream) -> dict | None:
+    head = stream.read(4)
+    if len(head) < 4:
+        return None
+    (length,) = struct.unpack("<I", head)
+    if length > 64 * 1024 * 1024:
+        raise ChainShotError("message too large")
+    body = stream.read(length)
+    return json.loads(body.decode("utf-8"))
+
+
+def native_write(stream, obj: dict) -> None:
+    body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+    stream.write(struct.pack("<I", len(body)) + body)
+    stream.flush()
+
+
+def cmd_native_host(args=None) -> int:
+    """Native messaging host: started by the browser, never by hand."""
+    stdin, stdout = sys.stdin.buffer, sys.stdout.buffer
+    while True:
+        try:
+            msg = native_read(stdin)
+        except (ValueError, ChainShotError) as exc:
+            native_write(stdout, {"ok": False, "error": f"bad message: {exc}"})
+            return 2
+        if msg is None:
+            return 0
+        try:
+            reply = host_handle(msg if isinstance(msg, dict) else {})
+        except Exception as exc:  # noqa: BLE001 - every error goes back to the extension
+            reply = {"ok": False, "error": str(exc)}
+        native_write(stdout, reply)
+
+
+def host_manifest(path: str, extra_ids=()) -> dict:
+    ids = list(dict.fromkeys(list(EXTENSION_IDS) + list(extra_ids)))
+    return {"name": HOST_NAME, "description": "ChainShot - save browser captures into the current case",
+            "path": path, "type": "stdio", "allowed_origins": [f"chrome-extension://{i}/" for i in ids]}
+
+
+def _posix_manifest_dirs() -> list[Path]:
+    home = Path.home()
+    if sys.platform == "darwin":
+        base = home / "Library" / "Application Support"
+        roots = ["Google/Chrome", "Chromium", "Microsoft Edge", "BraveSoftware/Brave-Browser", "Vivaldi"]
+    else:
+        base = home / ".config"
+        roots = ["google-chrome", "chromium", "microsoft-edge", "BraveSoftware/Brave-Browser", "vivaldi"]
+    return [base / r / "NativeMessagingHosts" for r in roots if (base / r).exists()]
+
+
+WIN_BROWSER_KEYS = (r"Software\Google\Chrome", r"Software\Chromium", r"Software\Microsoft\Edge",
+                    r"Software\BraveSoftware\Brave-Browser", r"Software\Vivaldi")
+
+
+def cmd_register_browser(args) -> int:
+    cfg = config_dir()
+    cfg.mkdir(parents=True, exist_ok=True)
+    script = Path(__file__).resolve()
+    if os.name == "nt":
+        import winreg
+        launcher = cfg / "chainshot-host.bat"
+        manifest_path = cfg / f"{HOST_NAME}.json"
+        if args.remove:
+            for k in WIN_BROWSER_KEYS:
+                try:
+                    winreg.DeleteKey(winreg.HKEY_CURRENT_USER, rf"{k}\NativeMessagingHosts\{HOST_NAME}")
+                except OSError:
+                    pass
+            print("Browser link removed.")
+            return 0
+        launcher.write_text(f'@echo off\r\n"{sys.executable}" "{script}" native-host %*\r\n', encoding="utf-8")
+        manifest_path.write_text(json.dumps(host_manifest(str(launcher), args.extension_id), indent=2), encoding="utf-8")
+        for k in WIN_BROWSER_KEYS:
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"{k}\NativeMessagingHosts\{HOST_NAME}") as key:
+                winreg.SetValueEx(key, "", 0, winreg.REG_SZ, str(manifest_path))
+        print(f"Browser link registered for Chrome, Edge, Brave, Chromium, Vivaldi: {manifest_path}")
+        return 0
+    dirs = [Path(d) for d in args.dir] if args.dir else _posix_manifest_dirs()
+    if args.remove:
+        for d in dirs:
+            (d / f"{HOST_NAME}.json").unlink(missing_ok=True)
+        print("Browser link removed.")
+        return 0
+    if not dirs:
+        raise ChainShotError("no Chromium-based browser profile found; use --dir <NativeMessagingHosts folder>")
+    launcher = cfg / "chainshot-host"
+    launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" native-host "$@"\n', encoding="utf-8")
+    launcher.chmod(0o755)
+    for d in dirs:
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{HOST_NAME}.json").write_text(json.dumps(host_manifest(str(launcher), args.extension_id), indent=2),
+                                             encoding="utf-8")
+        print(f"Browser link registered: {d / (HOST_NAME + '.json')}")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
 def build_parser() -> argparse.ArgumentParser:
@@ -770,10 +1195,38 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("tsr-info", help="show an RFC 3161 timestamp response")
     s.add_argument("tsr")
     s.set_defaults(func=cmd_tsr_info)
+
+    s = sub.add_parser("package", help="zip the case with chainshot.py, VERIFY.txt and SHA256SUMS.txt for delivery")
+    s.add_argument("case_dir")
+    s.add_argument("-o", "--output", help="zip file (default: next to the case folder)")
+    s.add_argument("--seal", action="store_true", help="seal the journal first")
+    s.add_argument("--tsa", nargs="?", const=DEFAULT_TSA, default=None, help="seal first with an RFC 3161 timestamp")
+    s.set_defaults(func=cmd_package)
+
+    s = sub.add_parser("use", help="show or set the current case (shared with ChainShot.exe and the module)")
+    s.add_argument("case_dir", nargs="?")
+    s.set_defaults(func=cmd_use)
+
+    s = sub.add_parser("tag", help="show or set the current tag")
+    s.add_argument("tag", nargs="?")
+    s.set_defaults(func=cmd_tag)
+
+    s = sub.add_parser("register-browser", help="let the browser extension save captures into the current case")
+    s.add_argument("--remove", action="store_true")
+    s.add_argument("--extension-id", action="append", default=[], help="also allow this extension ID")
+    s.add_argument("--dir", action="append", help="NativeMessagingHosts folder (default: every browser found)")
+    s.set_defaults(func=cmd_register_browser)
+
+    s = sub.add_parser("native-host", help=argparse.SUPPRESS)
+    s.add_argument("origin", nargs="*")
+    s.set_defaults(func=cmd_native_host)
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0].startswith("chrome-extension://"):  # started by the browser
+        return cmd_native_host()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)

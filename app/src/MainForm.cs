@@ -38,8 +38,14 @@ namespace ChainShot
         readonly NumericUpDown delayBox = new NumericUpDown { Width = 48, Minimum = 0, Maximum = 60 };
         readonly List<Control> caseControls = new List<Control>();
 
-        // journal
+        // journal, filter and preview
         readonly DataGridView grid = new DataGridView();
+        readonly SplitContainer split = new SplitContainer { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel2, BorderStyle = BorderStyle.None };
+        readonly TextBox filterBox = new TextBox { Width = 260 };
+        readonly Label filterInfo = new Label { AutoSize = true, ForeColor = Ui.Muted, Margin = new Padding(8, 7, 3, 3) };
+        readonly PictureBox previewImage = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(0xF3, 0xF2, 0xEE) };
+        readonly Label previewText = new Label { Dock = DockStyle.Bottom, Height = 200, Padding = new Padding(8, 6, 8, 6), Font = new Font("Segoe UI", 8.5f) };
+        readonly Label previewTitle = new Label { Dock = DockStyle.Top, Height = 26, Padding = new Padding(8, 6, 8, 0), Font = new Font("Segoe UI Semibold", 9f), Text = "Preview" };
         readonly Panel emptyPanel = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
         readonly FlowLayoutPanel recentPanel = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
 
@@ -78,7 +84,7 @@ namespace ChainShot
             status.Items.Add(statusText);
             status.Items.Add(hotkeyText);
 
-            Controls.Add(grid);
+            Controls.Add(BuildJournalArea());
             Controls.Add(emptyPanel);
             Controls.Add(actions);
             Controls.Add(bar);
@@ -134,6 +140,8 @@ namespace ChainShot
             ev.DropDownItems.Add(CaseItem(Item("&Seal the journal", (s, e) => Seal(false))));
             ev.DropDownItems.Add(CaseItem(Item("Seal + RFC 3161 &timestamp", (s, e) => Seal(true))));
             ev.DropDownItems.Add(CaseItem(Item("HTML &report", (s, e) => MakeReport(), Keys.Control | Keys.R)));
+            ev.DropDownItems.Add(new ToolStripSeparator());
+            ev.DropDownItems.Add(CaseItem(Item("Export evidence &package...", (s, e) => ExportPackage(), Keys.Control | Keys.E)));
 
             var opt = new ToolStripMenuItem("&Options");
             var copy = new ToolStripMenuItem("&Copy added files into the case folder") { Checked = settings.CopyAddedFiles, CheckOnClick = true };
@@ -157,6 +165,20 @@ namespace ChainShot
                 if (v != null) { settings.TsaUrl = v.Trim().Length > 0 ? v.Trim() : Sealer.DefaultTsa; settings.Save(); }
             }));
             opt.DropDownItems.Add(Item("Add ChainShot to the &Start menu", (s, e) => CreateStartMenuShortcut(true)));
+            var link = new ToolStripMenuItem("Accept captures from the &browser extension") { Checked = settings.BrowserLink, CheckOnClick = true };
+            link.CheckedChanged += (s, e) =>
+            {
+                settings.BrowserLink = link.Checked;
+                settings.Save();
+                try
+                {
+                    if (link.Checked) BrowserLink.Register(Application.ExecutablePath); else BrowserLink.Unregister();
+                    SetStatus(link.Checked ? "Browser link on: in the ChainShot extension, choose \"ChainShot app\" to save captures into this case."
+                                           : "Browser link off.");
+                }
+                catch (Exception ex) { Ui.Error(this, "Browser link: " + ex.Message); }
+            };
+            opt.DropDownItems.Add(link);
 
             var help = new ToolStripMenuItem("&Help");
             help.DropDownItems.Add(Item("&Documentation", (s, e) => OpenUrl(AppInfo.RepoUrl + "#readme")));
@@ -168,7 +190,12 @@ namespace ChainShot
                 "MIT License. Built with the help of AI (Claude, Anthropic).\n\n" + AppInfo.RepoUrl,
                 "About ChainShot", MessageBoxButtons.OK, MessageBoxIcon.Information)));
 
-            menu.Items.AddRange(new ToolStripItem[] { file, cap, ev, opt, help });
+            var view = new ToolStripMenuItem("&View");
+            var preview = new ToolStripMenuItem("&Preview pane") { Checked = settings.ShowPreview, CheckOnClick = true, ShortcutKeys = Keys.F3 };
+            preview.CheckedChanged += (s, e) => { settings.ShowPreview = preview.Checked; settings.Save(); split.Panel2Collapsed = !preview.Checked; };
+            view.DropDownItems.Add(preview);
+            view.DropDownItems.Add(Item("&Filter the journal", (s, e) => { filterBox.Focus(); filterBox.SelectAll(); }, Keys.Control | Keys.L));
+            menu.Items.AddRange(new ToolStripItem[] { file, cap, ev, view, opt, help });
             MainMenuStrip = menu;
         }
 
@@ -245,8 +272,84 @@ namespace ChainShot
             bar.Controls.Add(Btn("Seal", (s, e) => Seal(false), "Freeze the current journal in a seal file whose SHA-256 you can write in your report"));
             bar.Controls.Add(Btn("Seal + timestamp", (s, e) => Seal(true), "Seal and get an RFC 3161 timestamp from a trusted time-stamp authority (internet)"));
             bar.Controls.Add(Btn("HTML report", (s, e) => MakeReport(), "Generate report/index.html and open it in your web browser"));
+            bar.Controls.Add(Btn("Export package", (s, e) => ExportPackage(), "One zip for delivery: the case, chainshot.py to verify it, VERIFY.txt and SHA256SUMS.txt"));
             bar.Controls.Add(Btn("Open folder", (s, e) => OpenFolder(), "Open the case folder in Explorer"));
             return bar;
+        }
+
+        Control BuildJournalArea()
+        {
+            var filterBar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8, 4, 8, 2), WrapContents = false };
+            filterBar.Controls.Add(Ui.Label("Filter"));
+            filterBar.Controls.Add(filterBox);
+            filterBar.Controls.Add(filterInfo);
+            filterBox.TextChanged += (s, e) => ApplyFilter();
+            filterBox.HandleCreated += (s, e) => Native.SetCueBanner(filterBox, "tag, text, file, URL...");
+            tips.SetToolTip(filterBox, "Show only the entries containing this text (tag, type, file, note, URL, title)");
+            split.Panel1.Controls.Add(grid);
+            split.Panel1.Controls.Add(filterBar);
+            var info = new Panel { Dock = DockStyle.Fill };
+            info.Controls.Add(previewImage);
+            info.Controls.Add(previewText);
+            info.Controls.Add(previewTitle);
+            split.Panel2.Controls.Add(info);
+            previewImage.Cursor = Cursors.Hand;
+            previewImage.DoubleClick += (s, e) => OpenEntry(SelectedEntry());
+            tips.SetToolTip(previewImage, "Double-click to open the file");
+            split.Panel2Collapsed = !settings.ShowPreview;
+            split.HandleCreated += (s, e) => { try { split.SplitterDistance = Math.Max(300, Math.Max(split.Width, ClientSize.Width) - 284); } catch (InvalidOperationException) { } };
+            grid.SelectionChanged += (s, e) => UpdatePreview(SelectedEntry());
+            return split;
+        }
+
+        void ApplyFilter()
+        {
+            string f = filterBox.Text.Trim();
+            int shown = 0;
+            grid.CurrentCell = null;
+            foreach (DataGridViewRow row in grid.Rows)
+            {
+                var e = row.Tag as JsonObject;
+                bool visible = f.Length == 0 || e == null || e.Where(kv => kv.Key != "chain").Any(kv => Convert.ToString(kv.Value).IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0);
+                row.Visible = visible;
+                if (visible) shown++;
+            }
+            filterInfo.Text = f.Length == 0 ? "" : shown + " of " + grid.Rows.Count + " entries";
+        }
+
+        void UpdatePreview(JsonObject e)
+        {
+            var old = previewImage.Image;
+            previewImage.Image = null;
+            if (old != null) old.Dispose();
+            if (e == null || current == null)
+            {
+                previewTitle.Text = "Preview";
+                previewText.Text = "Select an entry to see the capture and its details.";
+                return;
+            }
+            previewTitle.Text = "#" + e.Str("seq") + "  " + e.Str("type") + (e.Str("tag").Length > 0 ? "  -  " + e.Str("tag") : "");
+            string file = e.Str("file");
+            string lower = file.ToLowerInvariant();
+            if (file.Length > 0 && (lower.EndsWith(".png") || lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".bmp") || lower.EndsWith(".gif")))
+            {
+                try
+                {
+                    // Read into memory: never keep a lock on an evidence file.
+                    byte[] bytes = File.ReadAllBytes(current.Resolve(file));
+                    using (var ms = new MemoryStream(bytes))
+                    using (var img = Image.FromStream(ms)) previewImage.Image = new Bitmap(img);
+                }
+                catch (Exception) { previewTitle.Text += "  -  image unreadable (missing or modified?)"; }
+            }
+            var lines = new List<string> { "UTC  " + e.Str("utc").Replace("T", " "), "Local  " + e.Str("local").Replace("T", " ") };
+            if (file.Length > 0) lines.Add("File  " + file + (e.Str("size").Length > 0 ? " (" + e.Str("size") + " bytes)" : ""));
+            if (e.Str("sha256").Length > 0) lines.Add("SHA-256  " + e.Str("sha256"));
+            if (e.Str("title").Length > 0) lines.Add("Title  " + e.Str("title"));
+            if (e.Str("url").Length > 0) lines.Add("URL  " + e.Str("url"));
+            if (e.Str("note").Length > 0) lines.Add("Note  " + e.Str("note"));
+            lines.Add("By  " + e.Str("examiner") + " @ " + e.Str("host") + "  -  " + e.Str("source"));
+            previewText.Text = string.Join("\n", lines);
         }
 
         void BuildGrid()
@@ -263,13 +366,19 @@ namespace ChainShot
             grid.AllowDrop = true;
             grid.DragEnter += (s, e) => GridDragEnter(e);
             grid.DragDrop += (s, e) => GridDragDrop(e);
-            AddCol("seq", "#", 46, DataGridViewContentAlignment.MiddleRight);
-            AddCol("utc", "UTC", 170);
-            AddCol("tag", "Tag", 70);
-            AddCol("type", "Type", 80);
-            AddCol("evidence", "Evidence", 330).AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            AddCol("sha", "SHA-256", 150).DefaultCellStyle.Font = new Font("Consolas", 8.5f);
-            AddCol("status", "Status", 200);
+            AddCol("seq", "#", 40, DataGridViewContentAlignment.MiddleRight);
+            AddCol("utc", "UTC", 152);
+            AddCol("tag", "Tag", 58);
+            AddCol("type", "Type", 76);
+            var ev = AddCol("evidence", "Evidence", 300);
+            ev.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            ev.FillWeight = 300;
+            ev.MinimumWidth = 120;
+            AddCol("sha", "SHA-256", 112).DefaultCellStyle.Font = new Font("Consolas", 8.5f);
+            var st = AddCol("status", "Status", 110);
+            st.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            st.FillWeight = 110;
+            st.MinimumWidth = 70;
             grid.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0) OpenEntry(EntryAt(e.RowIndex)); };
             grid.CellFormatting += FormatCell;
 
@@ -354,6 +463,12 @@ namespace ChainShot
             if (hotkeys != null) return;
             foregroundTimer.Tick += (sender, args) => TrackForeground();
             foregroundTimer.Start();
+            // Keep the browser link pointing at this executable (it may have been moved).
+            if (settings.BrowserLink && !BrowserLink.IsRegisteredFor(Application.ExecutablePath))
+            {
+                try { BrowserLink.Register(Application.ExecutablePath); } catch (Exception) { /* optional feature */ }
+            }
+            WatchState();
             hotkeys = new HotkeyWindow();
             hotkeys.Pressed += id => DoCapture(id == HotWindow ? CaptureMode.Window : id == HotRegion ? CaptureMode.Region : CaptureMode.Screen, Source.Hotkey);
             if (!hotkeys.Register(HotScreen, Keys.P)) HotkeyFailures.Add("Ctrl+Alt+P");
@@ -505,7 +620,7 @@ namespace ChainShot
         void ShowCase(CaseFolder folder)
         {
             bool has = folder != null;
-            grid.Visible = has;
+            split.Visible = has;
             emptyPanel.Visible = !has;
             foreach (var c in caseControls) c.Enabled = has;
             foreach (ToolStripItem top in MainMenuStrip.Items)
@@ -596,6 +711,40 @@ namespace ChainShot
             catch (Exception ex) { SetStatus("Could not save settings: " + ex.Message, true); }
         }
 
+        // The extension (tag) and the PowerShell module (case, tag) change state.json too.
+        FileSystemWatcher stateWatcher;
+        readonly Timer stateTimer = new Timer { Interval = 300 };
+
+        void WatchState()
+        {
+            try
+            {
+                Directory.CreateDirectory(SharedState.Dir);
+                stateWatcher = new FileSystemWatcher(SharedState.Dir, "state.json") { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName, SynchronizingObject = this };
+                FileSystemEventHandler h = (s, e) => { stateTimer.Stop(); stateTimer.Start(); };
+                stateWatcher.Changed += h;
+                stateWatcher.Created += h;
+                stateWatcher.EnableRaisingEvents = true;
+                stateTimer.Tick += (s, e) => { stateTimer.Stop(); ApplyExternalState(); };
+            }
+            catch (Exception) { /* not essential */ }
+        }
+
+        void ApplyExternalState()
+        {
+            var fresh = SharedState.Load();
+            if (fresh.Tag != state.Tag)
+            {
+                state.Tag = fresh.Tag;
+                if (!tagBox.Focused) tagBox.Text = fresh.Tag;
+            }
+            if (!string.IsNullOrEmpty(fresh.CasePath) && fresh.CasePath != state.CasePath && CaseFolder.IsCase(fresh.CasePath))
+            {
+                OpenCase(fresh.CasePath, true);
+                SetStatus("Case switched by another ChainShot tool: " + fresh.CasePath);
+            }
+        }
+
         // ----------------------------------------------------------------- journal
         void WatchJournal()
         {
@@ -633,13 +782,14 @@ namespace ChainShot
                 if (extra.Length > 0) evidence = evidence.Length > 0 ? evidence + "  -  " + extra : extra;
                 string sha = e.Str("sha256");
                 int i = grid.Rows.Add(e.Str("seq"), e.Str("utc").Replace("T", " "), e.Str("tag"), e.Str("type"), evidence,
-                                      sha.Length > 16 ? sha.Substring(0, 16) + "..." : sha, c.Ok ? "chain OK" : string.Join(" / ", c.Problems));
+                                      sha.Length > 12 ? sha.Substring(0, 12) + "..." : sha, c.Ok ? "chain OK" : string.Join(" / ", c.Problems));
                 var row = grid.Rows[i];
                 row.Tag = e;
                 row.Cells["sha"].ToolTipText = sha;
                 row.Cells["evidence"].ToolTipText = evidence;
             }
             grid.ResumeLayout();
+            if (filterBox.Text.Trim().Length > 0) ApplyFilter();
             grid.ClearSelection();
             if ((scrollToEnd || atEnd) && grid.Rows.Count > 0) { try { grid.FirstDisplayedScrollingRowIndex = grid.Rows.Count - 1; } catch (InvalidOperationException) { } }
             UpdateInfo(quick.Entries.Count);
@@ -859,11 +1009,69 @@ namespace ChainShot
             try { Clipboard.SetText(r.Sha256); } catch (Exception) { }
             string msg = string.Format("Seal of entries 1-{0} written:\n{1}\n\nSHA-256 (copied to the clipboard):\n{2}\n\n", r.Entries, r.SealPath, r.Sha256);
             if (timestamp)
-                msg += r.TimestampError == null ? "RFC 3161 timestamp: " + r.TimestampTime + " (" + tsa + ")\n\n"
-                                                : "The timestamp could not be obtained: " + r.TimestampError + "\nThe local seal is valid; try again later.\n\n";
+            {
+                msg += r.TimestampError == null ? "RFC 3161 timestamp: " + r.TimestampTime + " (" + tsa + ")\n"
+                                                : "The timestamp could not be obtained: " + r.TimestampError + "\nThe local seal is valid; try again later.\n";
+                if (r.ClockOffset.HasValue)
+                {
+                    msg += "This computer's clock vs the TSA: " + r.ClockOffset.Value.ToString("+0.0;-0.0;+0.0", CultureInfo.InvariantCulture) + " s\n";
+                    if (Math.Abs(r.ClockOffset.Value) > Sealer.ClockWarnSeconds)
+                        msg += "WARNING: the clock is off by more than a minute: entry times are shifted accordingly. Synchronise the clock (Settings > Time > Sync now).\n";
+                }
+                msg += "\n";
+            }
             msg += "Write this SHA-256 in your signed report or send it to your client separately: it proves the journal was not changed afterwards.";
             SetStatus("Sealed " + r.Entries + " entries.", r.TimestampError != null);
             MessageBox.Show(this, msg, "ChainShot - seal", MessageBoxButtons.OK, r.TimestampError == null ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+
+        async void ExportPackage()
+        {
+            if (current == null || busy) return;
+            var folder = current;
+            var entries = folder.ReadEntries();
+            int lastSeal = entries.FindLastIndex(x => x.Str("type") == "seal");
+            int after = entries.Count - 1 - lastSeal - (lastSeal >= 0 && lastSeal + 1 < entries.Count && entries[lastSeal + 1].Str("type") == "timestamp" ? 1 : 0);
+            bool seal = false, tsa = false;
+            if (lastSeal < 0 || after > 0)
+            {
+                var r = MessageBox.Show(this, (lastSeal < 0 ? "The journal has no seal." : after + " entr" + (after == 1 ? "y was" : "ies were") + " added after the last seal.") +
+                    "\n\nSeal it with an RFC 3161 timestamp before packaging?\nYes = seal + timestamp (internet), No = local seal only, Cancel = package as it is.",
+                    "ChainShot - package", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                seal = r != DialogResult.Cancel;
+                tsa = r == DialogResult.Yes;
+            }
+            string target;
+            using (var d = new SaveFileDialog { Filter = "Zip archive (*.zip)|*.zip", FileName = Path.GetFileName(Package.DefaultPath(folder)),
+                                                InitialDirectory = Path.GetDirectoryName(folder.Root), Title = "Evidence package" })
+            {
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                target = d.FileName;
+            }
+            string tsaUrl = tsa ? settings.TsaUrl : null;
+            SetBusy(true, "Building the evidence package...");
+            Package.Result res = null;
+            string tsaError = null;
+            try
+            {
+                res = await Task.Run(() =>
+                {
+                    if (seal) tsaError = Sealer.Seal(folder, "SEAL", tsaUrl).TimestampError;
+                    return Package.Create(folder, target);
+                });
+            }
+            catch (Exception ex) { Ui.Error(this, "Package refused: " + ex.Message); }
+            finally { SetBusy(false); }
+            ReloadJournal(true);
+            if (res == null) return;
+            try { Clipboard.SetText(res.Sha256); } catch (Exception) { }
+            Inform("Package written: " + res.Path);
+            var answer = MessageBox.Show(this, string.Format("Evidence package written ({0} files):\n{1}\n\nSHA-256 (copied to the clipboard):\n{2}\n\n{3}" +
+                "It contains the case, chainshot.py to verify it, VERIFY.txt with the instructions and SHA256SUMS.txt.\n" +
+                "Send the SHA-256 to the recipient by another channel.\n\nShow the file in Explorer?",
+                res.Files, res.Path, res.Sha256, tsaError != null ? "The timestamp failed (" + tsaError + "); the journal has a local seal.\n\n" : ""),
+                "ChainShot - package", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+            if (answer == DialogResult.Yes) Start("explorer.exe", "/select,\"" + res.Path + "\"");
         }
 
         async void MakeReport()
@@ -1030,29 +1238,40 @@ namespace ChainShot
 
         // -------------------------------------------------------------- smoke test
         /// <summary>Used by CI: shows the window, saves a screenshot of it and returns a summary.</summary>
-        public async Task<JsonObject> SmokeTest(string pngPath)
+        public async Task<JsonObject> SmokeTest(string pngPath, string shotsDir)
         {
-            // A tidy window for the README picture: fits the screen, no selection, no tooltip.
+            // A tidy window for the README pictures: fits the screen, no tooltip.
             Rectangle wa = Screen.FromControl(this).WorkingArea;
             WindowState = FormWindowState.Normal;
             Bounds = new Rectangle(wa.X + 8, wa.Y + 8, Math.Min(1000, wa.Width - 16), Math.Min(640, wa.Height - 16));
             Cursor.Position = new Point(wa.Right - 2, wa.Bottom - 2);
             await Task.Delay(1500);
+            for (int i = 0; i < 40 && busy; i++) await Task.Delay(250); // let the first verification finish
             Activate();
+            // Show the preview of the last capture.
             grid.ClearSelection();
-            await Task.Delay(500);
-            Rectangle b = Native.GetWindowBounds(Handle); // visible frame, without the shadow
-            using (var bmp = new Bitmap(b.Width, b.Height))
+            var lastShot = grid.Rows.Cast<DataGridViewRow>().LastOrDefault(r => { var e = r.Tag as JsonObject; return e != null && (e.Str("type") == "screenshot" || e.Str("type") == "browser"); });
+            if (lastShot != null) { lastShot.Selected = true; UpdatePreview(lastShot.Tag as JsonObject); }
+            await Task.Delay(700);
+            SaveWindowShot(Handle, pngPath);
+            if (!string.IsNullOrEmpty(shotsDir))
             {
-                bool grabbed = false;
-                try
+                Directory.CreateDirectory(shotsDir);
+                using (var d = new NewCaseDialog("Analyst", @"D:\Cases"))
                 {
-                    using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(b.Location, Point.Empty, b.Size);
-                    grabbed = true;
+                    d.Show(this);
+                    d.Location = new Point(Left + 120, Top + 110);
+                    d.SetSample("DEMO-02 Laptop of the finance department");
+                    await Task.Delay(800);
+                    SaveWindowShot(d.Handle, Path.Combine(shotsDir, "app-new-case.png"));
+                    d.Close();
                 }
-                catch (Exception) { }
-                if (!grabbed) DrawToBitmap(bmp, new Rectangle(Point.Empty, b.Size));
-                bmp.Save(pngPath, System.Drawing.Imaging.ImageFormat.Png);
+                // Tray menu, opened next to the window.
+                var menu = tray.ContextMenuStrip;
+                menu.Show(this, new Point(ClientSize.Width - 260, 120));
+                await Task.Delay(600);
+                SaveWindowShot(menu.Handle, Path.Combine(shotsDir, "app-tray-menu.png"));
+                menu.Close();
             }
             var o = new JsonObject();
             o["rows"] = grid.Rows.Count.ToString(CultureInfo.InvariantCulture);
@@ -1061,7 +1280,18 @@ namespace ChainShot
             o["hotkeys_failed"] = HotkeyFailures.Cast<object>().ToList();
             o["menu_items"] = MainMenuStrip.Items.OfType<ToolStripMenuItem>().Sum(m => m.DropDownItems.Count).ToString(CultureInfo.InvariantCulture);
             o["tray_items"] = tray.ContextMenuStrip.Items.Count.ToString(CultureInfo.InvariantCulture);
+            o["preview"] = previewImage.Image != null;
             return o;
+        }
+
+        static void SaveWindowShot(IntPtr hwnd, string path)
+        {
+            Rectangle b = Native.GetWindowBounds(hwnd); // visible frame, without the shadow
+            using (var bmp = new Bitmap(b.Width, b.Height))
+            {
+                using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(b.Location, Point.Empty, b.Size);
+                bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+            }
         }
     }
 }
