@@ -957,7 +957,7 @@ def cmd_package(args) -> int:
 # (Chrome native messaging, see docs/browser-link.md)
 # --------------------------------------------------------------------------- #
 HOST_NAME = "com.chainshot.host"
-HOST_PROTOCOL = 1
+HOST_PROTOCOL = 2  # 2: "format": "mhtml" page archives
 # Extension IDs allowed to talk to the host: the ID fixed by the "key" of extension/manifest.json
 # (unpacked install), then the store IDs once published.
 EXTENSION_IDS = ("dcccfnbiglhpbcdhbmokfilfgpfnmikf",)
@@ -1008,9 +1008,16 @@ def host_handle(msg: dict) -> dict:
         return {"ok": True, "intact": res.ok, "entries": len(res.rows), "seals": len(res.seals), "problems": problems[:20]}
     if kind == "capture":
         import base64
-        data = base64.b64decode(msg.get("png_base64", ""), validate=True)
-        if not data.startswith(b"\x89PNG\r\n\x1a\n") or len(data) > MAX_PNG_BYTES:
-            raise ChainShotError("the capture is not a PNG image (or is too large)")
+        fmt = str(msg.get("format", "png")).lower()
+        if fmt not in ("png", "mhtml"):
+            raise ChainShotError(f"unsupported capture format: {fmt}")
+        data = base64.b64decode(msg.get("png_base64") or msg.get("data_base64") or "", validate=True)
+        if len(data) > MAX_PNG_BYTES:
+            raise ChainShotError("the capture is too large")
+        if fmt == "png" and not data.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ChainShotError("the capture is not a PNG image")
+        if fmt == "mhtml" and b"MIME-Version" not in data[:4096] and not data.startswith(b"From:"):
+            raise ChainShotError("the page archive is not an MHTML document")
         when = utc_now()
         utc = str(msg.get("utc", ""))
         if _UTC_RE.match(utc):
@@ -1021,13 +1028,14 @@ def host_handle(msg: dict) -> dict:
         with case.lock():
             entries = case.entries()
             seq = len(entries) + 1
-            if str(msg.get("expected_seq", "")) != str(seq):
+            # A banner shows the entry number: it must still be the next one (not needed for archives).
+            if fmt == "png" and str(msg.get("expected_seq", "")) != str(seq):
                 info = _host_case_info(case)
                 info.update(ok=False, retry=True, error=f"the journal changed (next entry is #{seq})")
                 return info
             safe_tag = re.sub(r"[^\w\-]", "_", tag) or "untagged"
             stamp = when.strftime("%Y%m%dT%H%M%S") + f"{when.microsecond // 1000:03d}Z"
-            name = f"{seq:04d}_{stamp}_{safe_tag}.png"
+            name = f"{seq:04d}_{stamp}_{safe_tag}.{fmt}"
             (case.root / "captures").mkdir(exist_ok=True)
             target = case.root / "captures" / name
             with open(target, "xb") as fh:

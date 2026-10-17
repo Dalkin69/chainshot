@@ -272,6 +272,9 @@ def browser_link_host_protocol():
         {"type": "note", "text": "noted in the browser"},
         {"type": "verify"},
     )
+    [arch] = native({"type": "capture", "format": "mhtml", "url": "https://example.org/", "tag": "W7",
+                     "data_base64": base64.b64encode(b"From: <Saved by Blink>\r\nMIME-Version: 1.0\r\n\r\nx").decode()})
+    assert arch["ok"] and arch["entry"]["file"].endswith("_W7.mhtml"), arch
     assert hello["ok"] and hello["case"]["next_seq"] == 2 and hello["case"]["name"] == "LINK", hello
     assert tag["tag"] == "W7", tag
     assert cap["ok"] and cap["entry"]["seq"] == "2" and cap["entry"]["utc"] == now, cap
@@ -284,6 +287,7 @@ def browser_link_host_protocol():
     assert entries[1]["source"] == "chainshot-ext/1.2.0" and entries[1]["extra"]["via"].startswith("chainshot-app/"), entries[1]
     assert entries[2]["tag"] == "W7", "a note without tag gets the current tag"
     assert py_verify(d) == 0
+    assert hello["protocol"] == 2, hello
 
 
 @test

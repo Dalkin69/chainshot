@@ -41,3 +41,6 @@ kbd { font: 11px ui-monospace, Consolas, monospace; padding: 1px 4px; border-rad
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
 #appLink p { margin: 0 0 6px; }
 .app-mode .grid { grid-template-columns: 1fr; }
+.opts { display: flex; gap: 14px; flex-wrap: wrap; margin: -2px 0 8px; }
+label.check { display: flex; align-items: center; gap: 6px; font-weight: 600; margin: 0; }
+label.check input { width: auto; margin: 0; }
