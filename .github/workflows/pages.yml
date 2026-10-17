@@ -36,9 +36,20 @@ jobs:
           cp docs/img/*.png extension/icons/icon128.png _site/img/
           # Search engine ownership tags, from repository variables (Settings > Secrets and
           # variables > Actions > Variables): GOOGLE_SITE_VERIFICATION, BING_SITE_VERIFICATION.
+          # Each variable may hold the bare token, the whole <meta> tag, or (Google "HTML file"
+          # method) the file content "google-site-verification: googleXXXX.html".
+          token() { printf '%s' "$1" | sed -E 's/.*content="([^"]*)".*/\1/' | tr -d '\r\n "<>'; }
           tags=""
-          if [ -n "$GOOGLE" ]; then tags="$tags<meta name=\"google-site-verification\" content=\"$GOOGLE\">"; fi
-          if [ -n "$BING" ]; then tags="$tags<meta name=\"msvalidate.01\" content=\"$BING\">"; fi
+          if [ -n "$GOOGLE" ]; then
+            gfile=$(printf '%s' "$GOOGLE" | grep -oE 'google[0-9a-f]+\.html' | head -1 || true)
+            if [ -n "$gfile" ]; then
+              printf 'google-site-verification: %s' "$gfile" > "_site/$gfile"
+              echo "Google verification file: $gfile"
+            else
+              tags="$tags<meta name=\"google-site-verification\" content=\"$(token "$GOOGLE")\">"
+            fi
+          fi
+          if [ -n "$BING" ]; then tags="$tags<meta name=\"msvalidate.01\" content=\"$(token "$BING")\">"; fi
           if [ -n "$tags" ]; then sed -i "s|<meta charset=\"utf-8\">|<meta charset=\"utf-8\">$tags|" _site/index.html; fi
           # Custom domain: put it in site/CNAME (and in the repository settings).
       - uses: actions/configure-pages@v5
