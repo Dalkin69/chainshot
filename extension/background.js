@@ -5,7 +5,7 @@
 //   <Downloads>/ChainShot/<case-slug>-<timestamp>/
 //       chainshot-case.json, journal.jsonl, captures/NNNN_<UTC>_<tag>.png
 // which is a regular ChainShot case: `python chainshot.py verify <folder>` checks it.
-// The journal of record is kept in chrome.storage.local and rewritten to disk
+// The journal of record is kept in ext.storage.local and rewritten to disk
 // after every entry (downloads API, conflictAction "overwrite").
 //
 // Destination "app": captures go instead into the case open in ChainShot.exe (or the one
@@ -17,18 +17,20 @@ import {
   formatUtc, formatLocal, fileStamp, slugify, verifyEntries,
 } from './lib/chain.js';
 
-const VERSION = chrome.runtime.getManifest().version;
+// Firefox exposes the promise-based API as `browser`, Chromium as `chrome`.
+const ext = globalThis.browser ?? globalThis.chrome;
+const VERSION = ext.runtime.getManifest().version;
 const SOURCE = `chainshot-ext/${VERSION}`;
 const ENTRY_TYPES = ['screenshot', 'browser', 'file', 'note', 'seal', 'timestamp'];
 
 // ---------------------------------------------------------------- state ---
 async function loadState() {
-  const { settings = {}, cases = {} } = await chrome.storage.local.get(['settings', 'cases']);
+  const { settings = {}, cases = {} } = await ext.storage.local.get(['settings', 'cases']);
   return { settings: { tag: '', nextNote: '', activeFolder: '', destination: 'downloads', ...settings }, cases };
 }
 
 async function saveState(state) {
-  await chrome.storage.local.set({ settings: state.settings, cases: state.cases });
+  await ext.storage.local.set({ settings: state.settings, cases: state.cases });
 }
 
 function activeCase(state) {
@@ -55,19 +57,19 @@ function bytesToBase64(bytes) {
 
 function waitForDownload(id, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { chrome.downloads.onChanged.removeListener(listener); reject(new Error('download timeout')); }, timeoutMs);
+    const timer = setTimeout(() => { ext.downloads.onChanged.removeListener(listener); reject(new Error('download timeout')); }, timeoutMs);
     function listener(delta) {
       if (delta.id !== id || !delta.state) return;
       if (delta.state.current === 'complete' || delta.state.current === 'interrupted') {
         clearTimeout(timer);
-        chrome.downloads.onChanged.removeListener(listener);
+        ext.downloads.onChanged.removeListener(listener);
         if (delta.state.current === 'complete') resolve(id);
         else reject(new Error(`download interrupted: ${delta.error?.current || 'unknown'}`));
       }
     }
-    chrome.downloads.onChanged.addListener(listener);
-    chrome.downloads.search({ id }).then(([item]) => {
-      if (item?.state === 'complete') { clearTimeout(timer); chrome.downloads.onChanged.removeListener(listener); resolve(id); }
+    ext.downloads.onChanged.addListener(listener);
+    ext.downloads.search({ id }).then(([item]) => {
+      if (item?.state === 'complete') { clearTimeout(timer); ext.downloads.onChanged.removeListener(listener); resolve(id); }
     });
   });
 }
@@ -80,14 +82,14 @@ async function writeFile(relativePath, mime, bytes) {
   const url = blobUrl || `data:${mime};base64,${bytesToBase64(bytes)}`;
   let id;
   try {
-    id = await chrome.downloads.download({ url, filename: relativePath, conflictAction: 'overwrite', saveAs: false });
+    id = await ext.downloads.download({ url, filename: relativePath, conflictAction: 'overwrite', saveAs: false });
     await waitForDownload(id);
   } finally {
     if (blobUrl) setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
   }
   // Remove the entry from the browser's download list (the file stays on disk):
   // the journal is rewritten after every entry and would flood the list.
-  await chrome.downloads.erase({ id }).catch(() => {});
+  await ext.downloads.erase({ id }).catch(() => {});
   return id;
 }
 
@@ -176,7 +178,7 @@ async function addBanner(source, lines) {
 const MAX_PAGE_PX = 30000; // device pixels: canvas limits and file size
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* Functions injected in the page (chrome.scripting): they must be self-contained. */
+/* Functions injected in the page (ext.scripting): they must be self-contained. */
 function pageMetrics() {
   const d = document.documentElement;
   return {
@@ -220,7 +222,7 @@ function pageRestore(x, y) {
 }
 
 async function inPage(tab, func, args = []) {
-  const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func, args });
+  const [res] = await ext.scripting.executeScript({ target: { tabId: tab.id }, func, args });
   return res?.result;
 }
 
@@ -275,16 +277,16 @@ function captureLine(g) {
   return line;
 }
 
-const mhtmlAvailable = () => (chrome.runtime.getManifest().optional_permissions || []).includes('pageCapture');
+const mhtmlAvailable = () => (ext.runtime.getManifest().optional_permissions || []).includes('pageCapture');
 
 /** MHTML archive of the page (Chromium; needs the optional pageCapture permission). */
 async function pageArchive(tab) {
-  if (!chrome.pageCapture) throw new Error('Page archive: allow it in the popup first (MHTML option).');
+  if (!ext.pageCapture) throw new Error('Page archive: allow it in the popup first (MHTML option).');
   // The blob is backed by a temporary file that Chrome sometimes removes before it is read
   // (NotFoundError): save the page again in that case.
   for (let attempt = 0; ; attempt++) {
     try {
-      const blob = await chrome.pageCapture.saveAsMHTML({ tabId: tab.id });
+      const blob = await ext.pageCapture.saveAsMHTML({ tabId: tab.id });
       return new Uint8Array(await blob.arrayBuffer());
     } catch (err) {
       if (attempt >= 4 || err?.name !== 'NotFoundError') throw err;
@@ -299,7 +301,7 @@ const HOST = 'com.chainshot.host';
 async function hostCall(message) {
   let reply;
   try {
-    reply = await chrome.runtime.sendNativeMessage(HOST, { protocol: 1, ...message });
+    reply = await ext.runtime.sendNativeMessage(HOST, { protocol: 1, ...message });
   } catch (err) {
     throw new Error('ChainShot app not reachable. Start ChainShot.exe once (Windows) or run '
       + '"chainshot.py register-browser", then try again. Details: ' + (err?.message || err));
@@ -355,10 +357,11 @@ async function captureToApp(state, tab, grab, now, text) {
   throw new Error('The journal keeps changing; capture again.');
 }
 
-async function captureTab({ note, fullPage, archive } = {}) {
+async function captureTab({ note, fullPage, archive, tabId } = {}) {
   return serial(async () => {
     const state = await loadState();
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    // tabId: automation (tests); the tab must be the visible one of its window.
+    const [tab] = tabId ? [await ext.tabs.get(tabId)] : await ext.tabs.query({ active: true, lastFocusedWindow: true });
     if (!tab) throw new Error('No active tab.');
     const full = fullPage ?? state.settings.fullPage === true;
     const withArchive = (archive ?? state.settings.archive === true) && mhtmlAvailable();
@@ -414,7 +417,7 @@ async function captureTab({ note, fullPage, archive } = {}) {
 async function captureVisible(windowId) {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+      return await ext.tabs.captureVisibleTab(windowId, { format: 'png' });
     } catch (err) {
       if (attempt >= 4 || !/MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND/.test(String(err?.message || err))) throw err;
       await new Promise((r) => setTimeout(r, 600));
@@ -423,9 +426,9 @@ async function captureVisible(windowId) {
 }
 
 function flashBadge(text, color) {
-  chrome.action.setBadgeBackgroundColor({ color });
-  chrome.action.setBadgeText({ text });
-  setTimeout(() => chrome.action.setBadgeText({ text: '' }), 2500);
+  ext.action.setBadgeBackgroundColor({ color });
+  ext.action.setBadgeText({ text });
+  setTimeout(() => ext.action.setBadgeText({ text: '' }), 2500);
 }
 
 // ---------------------------------------------------------------- misc ---
@@ -494,7 +497,7 @@ const handlers = {
   }),
 };
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+ext.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   const h = handlers[msg?.cmd];
   if (!h) return false;
   Promise.resolve(h(msg)).then(
@@ -504,9 +507,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true; // async response
 });
 
-chrome.commands.onCommand.addListener((command) => {
+ext.commands.onCommand.addListener((command) => {
   if (command === 'capture-tab') captureTab().catch((e) => console.warn('ChainShot capture failed:', e));
 });
 
-// Exposed for automated tests (tests/extension.spec.mjs) through the service worker.
+// Exposed for automated tests (tests/extension.test.mjs, tests/firefox_e2e.py) through the background context.
 globalThis.chainshot = handlers;

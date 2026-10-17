@@ -44,7 +44,7 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
         static int Main(string[] args)
         {
             // Started by the browser for the extension (Chrome native messaging): binary stdin/stdout.
-            if (args.Length > 0 && args[0].StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase))
+            if (args.Length > 0 && (args[0].StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase) || BrowserLink.IsFirefoxLaunch(args)))
             {
                 try { return BrowserLink.Serve(Console.OpenStandardInput(), Console.OpenStandardOutput()); }
                 catch (Exception) { return 2; }
@@ -206,7 +206,7 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
                 {
                     if (o.Has("remove")) { BrowserLink.Unregister(); w.WriteLine("Browser link removed."); return 0; }
                     var ids = o.Get("extension-id") != null ? new[] { o.Get("extension-id") } : new string[0];
-                    w.WriteLine("Browser link registered for Chrome, Edge, Brave, Chromium and Vivaldi: " + BrowserLink.Register(Application.ExecutablePath, ids));
+                    w.WriteLine("Browser link registered for Chrome, Edge, Brave, Chromium, Vivaldi and Firefox: " + BrowserLink.Register(Application.ExecutablePath, ids));
                     return 0;
                 }
 

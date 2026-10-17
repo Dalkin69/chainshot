@@ -30,22 +30,15 @@ jobs:
           test "v$(python3 tests/check_versions.py --print)" = "$v" || { echo "::error::tag $v does not match the version in the sources"; exit 1; }
           cp LICENSE PRIVACY.md app/README.md dist/app/
           (cd dist/app && zip -qr "../chainshot-app-${v}.zip" .)
-          mkdir -p dist/ps/ChainShot dist/ext
+          mkdir -p dist/ps/ChainShot
           cp -r windows/ChainShot/* dist/ps/ChainShot/
           cp python/chainshot.py dist/ps/ChainShot/
           cp windows/Install-ChainShot.ps1 windows/README.md LICENSE PRIVACY.md dist/ps/
           (cd dist/ps && zip -qr "../chainshot-powershell-${v}.zip" .)
-          cp -r extension/* dist/ext/
-          cp LICENSE dist/ext/
-          (cd dist/ext && zip -qr "../chainshot-extension-${v}.zip" .)
-          # Store package: same files without README and without the "key" (stores assign their own).
-          mkdir -p dist/ext-store
-          cp -r extension/* LICENSE dist/ext-store/
-          rm -f dist/ext-store/README.md
-          python3 -c "import json,sys; p='dist/ext-store/manifest.json'; m=json.load(open(p)); m.pop('key',None); json.dump(m,open(p,'w'),indent=2)"
-          (cd dist/ext-store && zip -qr "../chainshot-extension-store-${v}.zip" .)
+          # Browser extension: Chromium (unpacked), Chrome Web Store / Edge Add-ons, Firefox (AMO).
+          python3 tools/build_extension.py --out dist --zip "$v"
           cp python/chainshot.py dist/chainshot.py
-          (cd dist && sha256sum chainshot-app-${v}.zip chainshot-powershell-${v}.zip chainshot-extension-${v}.zip chainshot-extension-store-${v}.zip chainshot.py > SHA256SUMS.txt)
+          (cd dist && sha256sum chainshot-app-${v}.zip chainshot-powershell-${v}.zip chainshot-extension-${v}.zip chainshot-extension-store-${v}.zip chainshot-extension-firefox-${v}.zip chainshot.py > SHA256SUMS.txt)
           cat dist/SHA256SUMS.txt
       - name: Release notes from CHANGELOG (if the release has no description)
         env:

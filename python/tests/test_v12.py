@@ -132,6 +132,23 @@ class TestNativeHost(WithConfig):
         self.assertIn("MHTML", bad["error"])
         self.assertEqual(run("verify", self.case), 0)
 
+    def test_firefox_registration_and_launch(self):
+        if os.name == "nt":
+            self.skipTest("registry variant is exercised by the Windows app tests")
+        d = self.tmp / "native-messaging-hosts"
+        self.assertEqual(run("register-browser", "--firefox-dir", d), 0)
+        m = json.loads((d / "com.chainshot.host.json").read_text())
+        self.assertEqual(m["allowed_extensions"], [cs.GECKO_ID])
+        self.assertNotIn("allowed_origins", m)
+        # Firefox starts the host with the manifest path and the add-on ID.
+        run("use", self.case)
+        data = json.dumps({"type": "hello"}).encode()
+        p = subprocess.run([m["path"], str(d / "com.chainshot.host.json"), cs.GECKO_ID],
+                           input=struct.pack("<I", len(data)) + data, capture_output=True, timeout=60,
+                           env=dict(os.environ, CHAINSHOT_CONFIG_DIR=str(self.cfg)))
+        (n,) = struct.unpack("<I", p.stdout[:4])
+        self.assertEqual(json.loads(p.stdout[4:4 + n])["case"]["name"], "LINK-01")
+
     def test_browser_clock_far_off_is_ignored(self):
         run("use", self.case)
         old = "2001-01-01T00:00:00.000Z"

@@ -26,6 +26,9 @@ namespace ChainShot
         /// extension/manifest.json (unpacked install), then the store IDs once published.</summary>
         public static readonly string[] ExtensionIds = { "dcccfnbiglhpbcdhbmokfilfgpfnmikf" };
 
+        /// <summary>Firefox add-on ID (tools/build_extension.py).</summary>
+        public const string GeckoId = "chainshot@dalkin69";
+
         static readonly string[] BrowserKeys =
         {
             @"Software\Google\Chrome", @"Software\Chromium", @"Software\Microsoft\Edge",
@@ -34,6 +37,14 @@ namespace ChainShot
 
         // ------------------------------------------------------------ registration
         static string ManifestPath { get { return Path.Combine(SharedState.Dir, HostName + ".json"); } }
+        static string FirefoxManifestPath { get { return Path.Combine(SharedState.Dir, HostName + ".firefox.json"); } }
+        const string FirefoxKey = @"Software\Mozilla\NativeMessagingHosts\" + HostName;
+
+        /// <summary>True when Firefox started us: arguments are the manifest path and the add-on ID.</summary>
+        public static bool IsFirefoxLaunch(string[] args)
+        {
+            return args.Length >= 2 && args[0].EndsWith(".json", StringComparison.OrdinalIgnoreCase) && args[1] == GeckoId;
+        }
 
         /// <summary>Writes the host manifest next to the settings and registers it for every
         /// Chromium-based browser (current user only).</summary>
@@ -51,6 +62,15 @@ namespace ChainShot
             foreach (string k in BrowserKeys)
                 using (var key = Registry.CurrentUser.CreateSubKey(k + @"\NativeMessagingHosts\" + HostName))
                     key.SetValue("", ManifestPath);
+            // Firefox: same host, its own manifest format (allowed_extensions).
+            var ff = new JsonObject();
+            ff["name"] = HostName;
+            ff["description"] = manifest["description"];
+            ff["path"] = exePath;
+            ff["type"] = "stdio";
+            ff["allowed_extensions"] = new List<object> { GeckoId };
+            File.WriteAllText(FirefoxManifestPath, MiniJson.Serialize(ff, true) + "\n", Format.Utf8);
+            using (var key = Registry.CurrentUser.CreateSubKey(FirefoxKey)) key.SetValue("", FirefoxManifestPath);
             return ManifestPath;
         }
 
@@ -58,7 +78,9 @@ namespace ChainShot
         {
             foreach (string k in BrowserKeys)
                 Registry.CurrentUser.DeleteSubKeyTree(k + @"\NativeMessagingHosts\" + HostName, false);
+            Registry.CurrentUser.DeleteSubKeyTree(FirefoxKey, false);
             try { File.Delete(ManifestPath); } catch (IOException) { }
+            try { File.Delete(FirefoxManifestPath); } catch (IOException) { }
         }
 
         /// <summary>True when Chrome's key points to a manifest that launches this executable.</summary>

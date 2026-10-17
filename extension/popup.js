@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // ChainShot popup: thin UI over the service worker (all logic lives in background.js).
 
+const ext = globalThis.browser ?? globalThis.chrome; // Firefox: browser, Chromium: chrome
 const $ = (id) => document.getElementById(id);
 
 async function call(cmd, args = {}) {
-  const res = await chrome.runtime.sendMessage({ cmd, ...args });
+  const res = await ext.runtime.sendMessage({ cmd, ...args });
   if (!res?.ok) throw new Error(res?.error || 'No answer from ChainShot.');
   return res.result;
 }
@@ -72,7 +73,7 @@ function render(st) {
   const last = $('last');
   last.hidden = !st.last;
   if (st.last) {
-    last.innerHTML = '';
+    last.replaceChildren();
     const head = document.createElement('div');
     head.textContent = `#${st.last.seq} ${st.last.type} - ${st.last.utc}`;
     const file = document.createElement('div');
@@ -90,7 +91,7 @@ async function refresh() {
 
 async function init() {
   try {
-    const cmds = await chrome.commands.getAll();
+    const cmds = await ext.commands.getAll();
     const c = cmds.find((x) => x.name === 'capture-tab');
     $('shortcut').textContent = c?.shortcut || 'no shortcut';
   } catch { /* commands API unavailable: keep default label */ }
@@ -113,7 +114,7 @@ async function init() {
   $('archive').addEventListener('change', async () => {
     let on = $('archive').checked;
     // The page archive needs the optional pageCapture permission, asked once, on this click.
-    if (on) on = await chrome.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
+    if (on) on = await ext.permissions.request({ permissions: ['pageCapture'] }).catch(() => false);
     $('archive').checked = on;
     await call('setSettings', { archive: on }).catch((e) => say(e.message, 'bad'));
     if (!on) say('Page archive off.');
