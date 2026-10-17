@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """
 End-to-end test of the Firefox build of the extension (Selenium + geckodriver):
-capture, full page capture, journal on disk verified by chainshot.py, popup, and the
+capture, full page capture, journal on disk verified by chainshot.py, and the
 browser link with chainshot.py registered as Firefox native messaging host.
 
     python tools/build_extension.py --out dist
@@ -82,14 +82,22 @@ class Pages(http.server.BaseHTTPRequestHandler):
 
 # --------------------------------------------------------------------------- setup
 def setup():
-    global ext, server, BASE, driver, page_window, popup_window
+    global ext, server, BASE, driver
     ext = TMP / "extension"
     shutil.copytree(SRC, ext)
     manifest = json.loads((ext / "manifest.json").read_text(encoding="utf-8"))
     manifest["host_permissions"] = ["<all_urls>"]   # captures without a user gesture, for the test only
-    manifest["permissions"].append("tabs")
-    # WebDriver may not open moz-extension:// URLs directly: the test page navigates there instead.
-    manifest["web_accessible_resources"] = [{"resources": ["popup.html"], "matches": ["<all_urls>"]}]
+    # WebDriver cannot run scripts in extension pages: a test-only content script relays
+    # messages from the test page to the background script (like the popup does).
+    manifest["content_scripts"] = [{"matches": ["<all_urls>"], "js": ["test-bridge.js"]}]
+    (ext / "test-bridge.js").write_text("""
+window.addEventListener('message', (ev) => {
+  if (ev.source !== window || !ev.data || !ev.data.__chainshotTest) return;
+  const { id, msg } = ev.data.__chainshotTest;
+  const reply = (r) => window.postMessage({ __chainshotReply: { id, r } }, '*');
+  browser.runtime.sendMessage(msg).then(reply, (e) => reply({ ok: false, error: String(e) }));
+});
+""", encoding="utf-8")
     (ext / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     DL.mkdir()
     # Browser link: Firefox looks for host manifests in ~/.mozilla/native-messaging-hosts.
@@ -115,16 +123,6 @@ def setup():
     print("Firefox", driver.capabilities.get("browserVersion"))
 
     driver.get(BASE + "/evidence")
-    page_window = driver.current_window_handle
-    driver.switch_to.new_window("window")
-    driver.get(BASE + "/evidence?launcher")
-    driver.execute_script("window.location.href = arguments[0];", f"moz-extension://{UUID}/popup.html")
-    for _ in range(100):
-        if driver.current_url.startswith("moz-extension://"):
-            break
-        time.sleep(0.1)
-    assert driver.current_url.startswith("moz-extension://"), driver.current_url
-    popup_window = driver.current_window_handle
 
 
 
@@ -138,28 +136,25 @@ print(f"::notice title=Firefox::{driver.capabilities.get('browserVersion')}")
 
 
 def call(cmd, **args):
-    """Message to the background script, from the extension page (like the popup does)."""
-    driver.switch_to.window(popup_window)
+    """Message to the background script through the test bridge of the current page."""
     r = driver.execute_async_script("""
         const done = arguments[arguments.length - 1];
-        browser.runtime.sendMessage(arguments[0]).then(done, (e) => done({ ok: false, error: String(e) }));
+        const id = Math.random();
+        window.addEventListener('message', function h(ev) {
+          const rep = ev.data && ev.data.__chainshotReply;
+          if (rep && rep.id === id) { window.removeEventListener('message', h); done(rep.r); }
+        });
+        window.postMessage({ __chainshotTest: { id, msg: arguments[0] } }, '*');
     """, {"cmd": cmd, **args})
     if not r or not r.get("ok"):
         raise AssertionError(f"{cmd}: {r}")
     return r["result"]
 
 
-def page_tab(path):
-    driver.switch_to.window(page_window)
+def open_page(path):
+    """The page under test is the active tab: captures take the active tab."""
     driver.get(BASE + path)
     time.sleep(0.5)
-    driver.switch_to.window(popup_window)
-    tabs = driver.execute_async_script("""
-        const done = arguments[arguments.length - 1];
-        browser.tabs.query({ url: arguments[0] }).then((t) => done(t.map((x) => x.id)), (e) => done(String(e)));
-    """, BASE + path)
-    assert isinstance(tabs, list) and tabs, tabs
-    return tabs[0]
 
 
 def case_dir():
@@ -187,11 +182,13 @@ def png_size(p):
 # --------------------------------------------------------------------------- tests
 @test
 def capture_into_downloads_case():
+    open_page("/evidence")
     st = call("newCase", caseName="FIREFOX-01", examiner="Bot")
     assert st["case"]["entries"] == 1, st
+    open_page("/evidence")
     call("setSettings", tag="F1")
-    tab = page_tab("/evidence")
-    e = call("capture", tabId=tab, note="captured in Firefox")
+    open_page("/evidence")
+    e = call("capture", note="captured in Firefox")
     assert e["type"] == "browser" and e["tag"] == "F1" and e["title"] == "Firefox evidence é", e
     d = case_dir()
     lines = wait_lines(d / "journal.jsonl", 2)
@@ -205,8 +202,8 @@ def capture_into_downloads_case():
 
 @test
 def full_page_capture():
-    tab = page_tab("/long")
-    e = call("capture", tabId=tab, fullPage=True)
+    open_page("/long")
+    e = call("capture", fullPage=True)
     assert e["extra"]["mode"] == "fullpage" and int(e["extra"]["parts"]) >= 2, e["extra"]
     d = case_dir()
     wait_lines(d / "journal.jsonl", 3)
@@ -227,10 +224,11 @@ def mhtml_is_not_offered():
 def browser_link_with_chainshot_py():
     py("init", APP_CASE, "--case", "FF-APP", "--examiner", "Analyst")
     py("use", APP_CASE)
+    open_page("/evidence")
     st = call("setSettings", destination="app", tag="FA")
     assert st["app"]["connected"] and st["app"]["case"]["name"] == "FF-APP", st["app"]
-    tab = page_tab("/evidence")
-    e = call("capture", tabId=tab, note="linked")
+    open_page("/evidence")
+    e = call("capture", note="linked")
     assert e["seq"] == "2" and e["destination"] == "app", e
     call("addNote", text="note from Firefox")
     v = call("verify")
@@ -239,15 +237,6 @@ def browser_link_with_chainshot_py():
     assert lines[1]["source"].startswith("chainshot-ext/") and lines[1]["tag"] == "FA", lines[1]
     code, out = py("verify", APP_CASE)
     assert "ALL EVIDENCE INTACT" in out, out
-    driver.switch_to.window(popup_window)
-    driver.execute_script("location.reload();")
-    time.sleep(1)
-    for _ in range(50):
-        text = driver.find_element("id", "caseLine").text
-        if "ChainShot app" in text:
-            break
-        time.sleep(0.2)
-    assert "FF-APP - 3 entries (ChainShot app)" in text, text
     call("setSettings", destination="downloads")
 
 
