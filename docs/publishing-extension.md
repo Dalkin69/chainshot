@@ -8,30 +8,19 @@ needed is in this repository; the steps below need the maintainer's own accounts
 | --- | --- | --- | --- |
 | [Chrome Web Store](https://chrome.google.com/webstore/devconsole) | Chrome, Brave, Vivaldi, Opera | Google account + developer registration | one-time registration fee (5 USD at the time of writing) |
 | [Microsoft Edge Add-ons](https://partner.microsoft.com/dashboard/microsoftedge) | Edge | Microsoft Partner Center (individual developer) | free |
+| [Firefox Add-ons (AMO)](https://addons.mozilla.org/developers/) | Firefox 140+ | Mozilla account | free |
 
-Firefox is not covered yet: its Manifest V3 uses background scripts instead of a service worker, and
-native messaging uses another manifest format.
+## 1. Packages
 
-## 1. Build the store package
+Each GitHub release attaches the packages built by `tools/build_extension.py`:
 
-Each GitHub release attaches **`chainshot-extension-store-<version>.zip`**: the extension with the `key`
-removed from `manifest.json` (stores assign their own key). Upload that file, not the developer zip.
+| File | Upload to |
+| --- | --- |
+| `chainshot-extension-store-<version>.zip` | Chrome Web Store and Edge Add-ons (manifest without `key`: stores assign their own ID) |
+| `chainshot-extension-firefox-<version>.zip` | addons.mozilla.org (background script, add-on ID `chainshot@dalkin69`, Firefox 140+, data collection: none) |
+| `chainshot-extension-<version>.zip` | not for stores: unpacked installation (developer mode) |
 
-To build it by hand:
-
-```bash
-python3 - <<'EOF'
-import json, shutil, zipfile, pathlib
-src = pathlib.Path("extension"); m = json.loads((src / "manifest.json").read_text())
-m.pop("key", None)
-with zipfile.ZipFile("chainshot-extension-store.zip", "w", zipfile.ZIP_DEFLATED) as z:
-    for f in src.rglob("*"):
-        if f.is_file() and f.name != "manifest.json" and f.name != "README.md":
-            z.write(f, f.relative_to(src).as_posix())
-    z.writestr("manifest.json", json.dumps(m, indent=2))
-    z.write("LICENSE", "LICENSE")
-EOF
-```
+To build them locally: `python tools/build_extension.py --out dist --zip v1.3.0`.
 
 ## 2. Listing
 
@@ -52,7 +41,8 @@ Description:
 ```text
 ChainShot turns screenshots of web pages into evidence that anyone can check later.
 
-• One click (or Alt+Shift+S) captures the visible part of the tab.
+• One click (or Alt+Shift+S) captures the visible part of the tab, or the whole page (scrolled and stitched).
+• Optional page archive (MHTML) saved and hashed next to the screenshot.
 • A banner is added BELOW the page, never over it: entry number, case, tag, UTC time, examiner, URL and title.
 • Each capture is hashed with SHA-256 and chained to the previous entry in an append-only journal:
   editing, removing or reordering anything breaks the chain.
@@ -76,6 +66,8 @@ tamper-evident journal.*
 | Permission | Justification |
 | --- | --- |
 | `activeTab` | Captures the tab the user is on, only after the user clicks the button or presses the shortcut. |
+| `scripting` | Full page capture: after the user's click, scrolls the page part by part, hides fixed headers while capturing and restores the page. Nothing is read or sent. |
+| `pageCapture` (optional) | Page archive: saves the page as MHTML next to the screenshot, only if the user enables it in the popup (asked at that moment). |
 | `downloads` | Writes the capture, the journal and the case metadata into the user's Downloads folder. |
 | `storage` | Keeps the journal of the cases created in the browser and the user's tag and note on this computer. |
 | `nativeMessaging` | Optional link with the ChainShot desktop app on the same computer, so captures are saved into the case open in the app. Only used when the user selects "ChainShot app". |
@@ -83,9 +75,24 @@ tamper-evident journal.*
 Remote code: **No**. Data usage: tick **none** of the data categories (the extension does not collect or
 transmit user data), then certify the three statements (no sale, no unrelated use, no creditworthiness).
 
-## 4. After the first publication
+## 4. Firefox (addons.mozilla.org)
 
-1. Note the extension ID shown by each store (32 letters).
+1. [Developer Hub](https://addons.mozilla.org/developers/) > *Submit a New Add-on* > *On this site*.
+2. Upload `chainshot-extension-firefox-<version>.zip`. The automatic validation is the same linter as
+   the CI (`web-ext lint`).
+3. *Do you use a code generator, minifier...?*: **No**. The only build step inlines `lib/chain.js` into
+   `background.js`; if the reviewer asks for sources, give the release tag and `python tools/build_extension.py`.
+4. Listing: same description, screenshots and privacy policy as above. Category: *Privacy & Security*
+   or *Other*. License: MIT.
+5. Data collection: the manifest already declares **none** (Firefox shows it at install).
+
+Firefox limits: no MHTML page archive (Firefox has no `pageCapture` API); full page capture and the
+browser link work. In the Downloads mode Firefox may open its download panel for each file: use the
+*ChainShot app* destination, or turn off *Always ask you where to save files*.
+
+## 5. After the first publication
+
+1. Note the extension ID shown by each store (32 letters; Firefox keeps `chainshot@dalkin69`).
 2. Add both IDs to `BrowserLink.ExtensionIds` in `app/src/BrowserLink.cs` and to `EXTENSION_IDS` in
    `python/chainshot.py`, so the ChainShot app accepts the store versions; release a new version.
    Until then, users can run `ChainShot.exe register-browser --extension-id <id>`.
