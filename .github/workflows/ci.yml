@@ -48,6 +48,12 @@ jobs:
       - name: Every component has the same version number
         if: runner.os == 'Linux'
         run: python tests/check_versions.py
+      - name: Scoop and winget manifests can be generated
+        if: runner.os == 'Linux'
+        run: |
+          python packaging/update_manifests.py 9.9.9 "$(printf 'a%.0s' $(seq 64))" --root "$RUNNER_TEMP/pm"
+          python -c "import json,sys; m=json.load(open(sys.argv[1])); assert m['version']=='9.9.9' and m['hash']=='a'*64 and m['bin']" "$RUNNER_TEMP/pm/bucket/chainshot.json"
+          grep -q "InstallerSha256: $(printf 'A%.0s' $(seq 64))" "$RUNNER_TEMP"/pm/packaging/winget/manifests/d/Dalkin69/ChainShot/9.9.9/Dalkin69.ChainShot.installer.yaml
 
   powershell:
     name: PowerShell ${{ matrix.shell }} (${{ matrix.os }})

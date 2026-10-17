@@ -88,6 +88,8 @@ def setup():
     manifest = json.loads((ext / "manifest.json").read_text(encoding="utf-8"))
     manifest["host_permissions"] = ["<all_urls>"]   # captures without a user gesture, for the test only
     manifest["permissions"].append("tabs")
+    # WebDriver may not open moz-extension:// URLs directly: the test page navigates there instead.
+    manifest["web_accessible_resources"] = [{"resources": ["popup.html"], "matches": ["<all_urls>"]}]
     (ext / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     DL.mkdir()
     # Browser link: Firefox looks for host manifests in ~/.mozilla/native-messaging-hosts.
@@ -115,7 +117,13 @@ def setup():
     driver.get(BASE + "/evidence")
     page_window = driver.current_window_handle
     driver.switch_to.new_window("window")
-    driver.get(f"moz-extension://{UUID}/popup.html")
+    driver.get(BASE + "/evidence?launcher")
+    driver.execute_script("window.location.href = arguments[0];", f"moz-extension://{UUID}/popup.html")
+    for _ in range(100):
+        if driver.current_url.startswith("moz-extension://"):
+            break
+        time.sleep(0.1)
+    assert driver.current_url.startswith("moz-extension://"), driver.current_url
     popup_window = driver.current_window_handle
 
 
@@ -232,7 +240,8 @@ def browser_link_with_chainshot_py():
     code, out = py("verify", APP_CASE)
     assert "ALL EVIDENCE INTACT" in out, out
     driver.switch_to.window(popup_window)
-    driver.refresh()
+    driver.execute_script("location.reload();")
+    time.sleep(1)
     for _ in range(50):
         text = driver.find_element("id", "caseLine").text
         if "ChainShot app" in text:
