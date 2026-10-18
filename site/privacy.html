@@ -62,7 +62,9 @@
       <li>Registry values, for the current user only and only when you ask: start with Windows
         (<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</code>) and the browser link
         (<code>HKCU\Software\&lt;browser&gt;\NativeMessagingHosts\com.chainshot.host</code>, asked at first start).
-        <em>Options &gt; Uninstall from this computer</em> or <code>ChainShot.exe uninstall</code> removes all of them.</li>
+        Once one of them exists, ChainShot is listed in <em>Settings &gt; Apps &gt; Installed apps</em>
+        (<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ChainShot</code>). Uninstalling it there, or
+        <em>Options &gt; Uninstall from this computer</em>, removes all of them and can delete <code>ChainShot.exe</code>.</li>
       <li>Captures contain what is on your screen and may include personal data. Store case folders on media you control and
         apply the rules of your organisation on evidence and personal data.</li>
     </ul>

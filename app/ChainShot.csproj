@@ -12,8 +12,9 @@
     <RootNamespace>ChainShot</RootNamespace>
     <ApplicationIcon>..\windows\ChainShot\chainshot.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.3.1</Version>
+    <Version>1.3.2</Version>
     <Product>ChainShot</Product>
+    <AssemblyTitle>ChainShot</AssemblyTitle>
     <Company>ChainShot contributors</Company>
     <Copyright>Copyright (c) 2026 Dalkin69 - MIT License</Copyright>
     <Description>ChainShot - timestamped, hash-chained forensic screenshots</Description>

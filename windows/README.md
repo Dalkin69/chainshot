@@ -13,7 +13,11 @@ Then start **ChainShot Tray (PowerShell)** from the Start menu and use `Ctrl+Alt
 or `Ctrl+Alt+R` (region). `Get-Help <command> -Full` documents every command; the
 [main README](../README.md#reference) lists them.
 
-- No admin rights are needed: the installer copies the module into your Documents folder.
+- No admin rights are needed: the installer copies the module into your Documents folder and lists it in
+  Settings > Apps > Installed apps (*ChainShot PowerShell module*), from where it can be uninstalled.
+- The shortcuts start `ChainShotTray.exe`, a small launcher that the installer compiles from `ChainShotTray.cs` with
+  the C# compiler of the .NET Framework (part of Windows), so the Start menu and Task Manager > Startup apps show
+  *ChainShot* and its icon rather than *powershell.exe*.
 - On screens scaled to 125 % or 150 %, captures use physical pixels (per-monitor DPI awareness).
 - If a hotkey is already used by another program, a notification says so; the tray menu still works.
   The app and the PowerShell tray use the same hotkeys: run one of them at a time.

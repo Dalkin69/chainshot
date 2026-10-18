@@ -117,9 +117,9 @@ la ligne et la barre d'état indiquent quelle preuve ne correspond plus à son S
 4. Glissez des fichiers sur la fenêtre pour les hacher (export Autopsy, image disque), ajoutez des **notes**, puis
    **Verify**, **Seal + timestamp**, ouvrez le **HTML report** et, pour la remise, **Export package**.
 
-Fermer la fenêtre laisse ChainShot dans la zone de notification avec ses raccourcis. Pour le retirer : *Options >
-Uninstall from this computer* (ou `ChainShot.exe uninstall`), puis supprimez le fichier ; les dossiers de cas ne sont
-jamais touchés. Le [guide de l'application](app/README.md)
+Fermer la fenêtre laisse ChainShot dans la zone de notification avec ses raccourcis. Pour le retirer : **Paramètres >
+Applications > Applications installées > ChainShot > Désinstaller** (ou *Options > Uninstall from this computer*) ;
+tout ce que ChainShot a ajouté est retiré, et `ChainShot.exe` peut être supprimé. Les dossiers de cas ne sont jamais touchés. Le [guide de l'application](app/README.md)
 (en anglais) détaille les options et la ligne de commande (`ChainShot.exe verify`, `capture`, `seal --tsa`...).
 
 ### Windows : module PowerShell
@@ -140,7 +140,8 @@ Export-ChainShotReport -Open        # nécessite Python 3.9+
 Start-ChainShotTray                 # icône de notification avec les mêmes raccourcis (pas en même temps que l'application)
 ```
 
-`Uninstall-ChainShot.ps1` (dans le même zip) retire le module et ses raccourcis.
+Le module apparaît dans **Paramètres > Applications > Applications installées** sous le nom *ChainShot PowerShell
+module* ; le désinstaller depuis là (ou lancer `Uninstall-ChainShot.ps1`) retire le module et ses raccourcis.
 
 ### Extension navigateur (Chrome, Edge, Brave, Firefox)
 

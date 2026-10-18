@@ -147,8 +147,9 @@ flowchart LR
 4. Drop files on the window to hash them (an export from Autopsy, a disk image), add **notes**, then **Verify**,
    **Seal + timestamp**, open the **HTML report** and, to deliver, **Export package**.
 
-Closing the window keeps ChainShot in the notification area with its hotkeys. To remove it: *Options > Uninstall from
-this computer* (or `ChainShot.exe uninstall`), then delete the file; case folders are never touched. The [app guide](app/README.md)
+Closing the window keeps ChainShot in the notification area with its hotkeys. To remove it: **Settings > Apps >
+Installed apps > ChainShot > Uninstall** (or *Options > Uninstall from this computer*); it removes everything ChainShot
+added and can delete `ChainShot.exe`. Case folders are never touched. The [app guide](app/README.md)
 covers the options and the command line (`ChainShot.exe verify`, `capture`, `seal --tsa`...).
 
 ### Windows: PowerShell module
@@ -169,7 +170,8 @@ Export-ChainShotReport -Open        # needs Python 3.9+
 Start-ChainShotTray                 # tray icon with the same hotkeys (do not run it together with the app)
 ```
 
-`Uninstall-ChainShot.ps1` (in the same zip) removes the module and its shortcuts.
+The module is listed in **Settings > Apps > Installed apps** as *ChainShot PowerShell module*; uninstalling it there
+(or running `Uninstall-ChainShot.ps1`) removes the module and its shortcuts.
 
 ### Browser extension (Chrome, Edge, Brave, Firefox)
 
@@ -282,7 +284,7 @@ Do **not** open `journal.jsonl` in Excel and save it: that rewrites the file. Us
 | `use [<case>]` | show or set the current case (shared with the module and `chainshot.py`) |
 | `package [<case>] [--out FILE.zip] [--seal] [--tsa [URL]]` | evidence package for delivery |
 | `register-browser [--extension-id ID] [--remove]` | browser link for the extension (also done by the app at startup) |
-| `uninstall [--keep-settings]` | remove the shortcut, start with Windows, browser link and settings (not the cases) |
+| `uninstall [--keep-settings] [--delete-exe] [--gui]` | remove the shortcut, start with Windows, browser link, Installed apps entry and settings (not the cases); `--delete-exe` also deletes ChainShot.exe |
 | `selftest <vectors.json>` | check the implementation against the shared vectors |
 
 Commands use the current case unless `--case <folder>` is given. From PowerShell, add `| Out-Host` so the prompt

@@ -34,7 +34,10 @@ Command line (the current case is the one selected in the app or with Set-ChainS
                                       zip the case with chainshot.py, VERIFY.txt and SHA256SUMS.txt
   register-browser [--extension-id <id>] [--remove]
                                       let the browser extension save captures into the current case
-  uninstall [--keep-settings]         remove shortcuts, start with Windows, browser link and settings
+  uninstall [--keep-settings] [--delete-exe] [--gui]
+                                      remove what ChainShot added (Start menu shortcut, start with
+                                      Windows, browser link, Installed apps entry) and its settings;
+                                      --delete-exe also deletes ChainShot.exe, --gui asks with dialogs
                                       (case folders are never touched)
   selftest <canonical-vectors.json>
   --version | --help
@@ -52,6 +55,13 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
                 catch (Exception) { return 2; }
             }
             if (args.Length == 0 || args[0] == "--minimized" || args[0] == "--smoke-test") return RunGui(args);
+            // Settings > Apps > Installed apps > Uninstall.
+            if (args[0] == "uninstall" && args.Contains("--gui"))
+            {
+                Native.SetDpiAwareness();
+                Application.EnableVisualStyles();
+                return Uninstaller.Interactive(null) ? 0 : 1;
+            }
             AttachOutput();
             try { return RunCli(args); }
             catch (CliError ex) { Console.Error.WriteLine("error: " + ex.Message); return 2; }
@@ -112,7 +122,7 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
         {
             public readonly List<string> Positional = new List<string>();
             readonly Dictionary<string, string> named = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            static readonly HashSet<string> Flags = new HashSet<string> { "copy", "json", "open", "remove", "seal", "keep-settings" };
+            static readonly HashSet<string> Flags = new HashSet<string> { "copy", "json", "open", "remove", "seal", "keep-settings", "delete-exe", "gui" };
 
             public Options(string[] args)
             {
@@ -206,9 +216,10 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
 
                 case "register-browser":
                 {
-                    if (o.Has("remove")) { BrowserLink.Unregister(); w.WriteLine("Browser link removed."); return 0; }
+                    if (o.Has("remove")) { BrowserLink.Unregister(); Uninstaller.SyncAppsEntry(Application.ExecutablePath); w.WriteLine("Browser link removed."); return 0; }
                     var ids = o.Get("extension-id") != null ? new[] { o.Get("extension-id") } : new string[0];
                     w.WriteLine("Browser link registered for Chrome, Edge, Brave, Chromium, Vivaldi and Firefox: " + BrowserLink.Register(Application.ExecutablePath, ids));
+                    Uninstaller.SyncAppsEntry(Application.ExecutablePath);
                     return 0;
                 }
 
@@ -230,8 +241,14 @@ From PowerShell, pipe the output to wait for the result:  .\ChainShot.exe verify
 
                 case "uninstall":
                 {
+                    string exe = Application.ExecutablePath;
+                    Uninstaller.StopOtherInstances(exe);
                     foreach (string line in Uninstaller.Run(o.Has("keep-settings"))) w.WriteLine("Removed: " + line);
-                    w.WriteLine("Case folders were not touched. Delete " + Application.ExecutablePath + " to finish.");
+                    w.WriteLine("Case folders were not touched.");
+                    string manager = Uninstaller.PackageManager(exe);
+                    if (o.Has("delete-exe") && manager == null)
+                        foreach (string f in Uninstaller.ScheduleSelfDelete(exe)) w.WriteLine("Deleted when ChainShot exits: " + f);
+                    else if (manager == null) w.WriteLine("Delete " + exe + " to finish (or run: ChainShot.exe uninstall --delete-exe).");
                     return 0;
                 }
 

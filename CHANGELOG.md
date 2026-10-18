@@ -2,6 +2,30 @@
 
 All notable changes are listed here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.3.2] - 2026-10-18
+
+### Added
+- The app lists itself in **Settings > Apps > Installed apps** as soon as it has changed something on the
+  computer (browser link, start with Windows, Start menu shortcut), and can be uninstalled from there. The
+  entry follows the executable when it is moved or updated; copies installed by winget or Scoop keep the
+  package manager's own entry.
+- Uninstalling lists what will be removed, stops the other running ChainShot processes, removes everything
+  ChainShot added and offers to delete `ChainShot.exe` (with the other files of the release zip and their
+  folder when nothing else is in it). Command line: `ChainShot.exe uninstall --delete-exe`.
+- The PowerShell module is listed in Installed apps too (*ChainShot PowerShell module*); its uninstaller
+  also stops the tray and removes that entry.
+
+### Fixed
+- The PowerShell tray appeared as *powershell.exe* in Task Manager > Startup apps. Its shortcuts now start
+  `ChainShotTray.exe`, a small launcher compiled at install time from `ChainShotTray.cs` (C# compiler of the
+  .NET Framework, part of Windows), shown as *ChainShot* with its icon. Running `Install-ChainShot.ps1`
+  again fixes an existing start-at-logon shortcut.
+
+### Security
+- CodeQL analysis of the C# app, `chainshot.py`, the extension and the workflows on every pull request and
+  every week (Security tab > Code scanning).
+- `.oss-scanner/`: build image and threat model for Anthropic's OSS Scanner, checked by CI.
+
 ## [1.3.1] - 2026-10-17
 
 ### Changed

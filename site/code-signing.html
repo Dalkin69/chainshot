@@ -44,13 +44,14 @@
 
     <h2>System changes and uninstallation</h2>
     <p>ChainShot runs without installation and without administrator rights. It changes the system only when the user
-      asks: a Start menu shortcut, start with Windows, and the browser link (after a question at first start). All of
-      them are removed by <em>Options &gt; Uninstall from this computer</em> or <code>ChainShot.exe uninstall</code>;
-      package managers run the same command. Case folders are never touched.</p>
+      asks: a Start menu shortcut, start with Windows, and the browser link (after a question at first start). It then lists
+      itself in <em>Settings &gt; Apps &gt; Installed apps</em>, from where it is removed like any other program (or
+      <em>Options &gt; Uninstall from this computer</em>, <code>ChainShot.exe uninstall</code>): everything it added is
+      removed and the executable can be deleted. Case folders are never touched.</p>
 
     <h2>Verify a download</h2>
     <p>Compare the SHA-256 of the zip with <code>SHA256SUMS.txt</code> in the release:
-      <code>Get-FileHash chainshot-app-v1.3.0.zip</code>. Once signed, the signature is visible in the file
+      <code>Get-FileHash chainshot-app-v1.3.2.zip</code>. Once signed, the signature is visible in the file
       properties of <code>ChainShot.exe</code> (Digital Signatures tab) or with <code>Get-AuthenticodeSignature</code>.</p>
 
     <h2>Report a problem</h2>

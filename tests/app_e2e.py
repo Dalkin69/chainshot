@@ -407,12 +407,19 @@ def demo_case_screenshot():
 def uninstall_removes_what_the_app_added():
     import winreg
     run("register-browser")
+    # Listed in Settings > Apps > Installed apps once it has changed something on the computer.
+    apps = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\ChainShot"
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, apps) as k:
+        assert winreg.QueryValueEx(k, "DisplayName")[0] == "ChainShot"
+        assert winreg.QueryValueEx(k, "DisplayVersion")[0] == cs.__version__
+        assert winreg.QueryValueEx(k, "UninstallString")[0] == f'"{EXE}" uninstall --gui'
+        assert winreg.QueryValueEx(k, "DisplayIcon")[0] == f"{EXE},0"
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run") as k:
         winreg.SetValueEx(k, "ChainShot", 0, winreg.REG_SZ, f'"{EXE}" --minimized')
     code, out = run("uninstall")
     assert "Case folders were not touched" in out, out
     for key in (r"Software\Google\Chrome\NativeMessagingHosts\com.chainshot.host",
-                r"Software\Mozilla\NativeMessagingHosts\com.chainshot.host"):
+                r"Software\Mozilla\NativeMessagingHosts\com.chainshot.host", apps):
         try:
             winreg.OpenKey(winreg.HKEY_CURRENT_USER, key)
             raise AssertionError(f"{key} still present")
@@ -426,6 +433,30 @@ def uninstall_removes_what_the_app_added():
             pass
     assert not (CONFIG / "state.json").exists(), "settings removed"
     assert (CASE / "journal.jsonl").exists(), "cases untouched"
+
+
+@test
+def uninstall_can_delete_the_executable():
+    import time
+    # A folder holding only the release zip files goes entirely; a folder with other files keeps them.
+    alone = Path(tempfile.mkdtemp(prefix="cs-del-")) / "ChainShot-v1"
+    shared = Path(tempfile.mkdtemp(prefix="cs-keep-"))
+    alone.mkdir()
+    for d in (alone, shared):
+        shutil.copy2(EXE, d / "ChainShot.exe")
+        (d / "LICENSE").write_text("MIT", encoding="utf-8")
+    (shared / "my-notes.txt").write_text("keep me", encoding="utf-8")
+    for d in (alone, shared):
+        p = subprocess.run([str(d / "ChainShot.exe"), "uninstall", "--keep-settings", "--delete-exe"],
+                           capture_output=True, timeout=60, env=ENV)
+        assert p.returncode == 0, p.stdout + p.stderr
+    for _ in range(40):
+        if not alone.exists() and not (shared / "ChainShot.exe").exists():
+            break
+        time.sleep(0.5)
+    assert not alone.exists(), f"folder still there: {list(alone.iterdir()) if alone.exists() else ''}"
+    assert not (shared / "ChainShot.exe").exists(), "exe not deleted"
+    assert (shared / "my-notes.txt").exists() and (shared / "LICENSE").exists(), "other files must stay"
 
 
 failed = [(n, tb) for n, tb in results if tb]
