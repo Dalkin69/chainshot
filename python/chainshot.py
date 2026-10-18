@@ -48,7 +48,7 @@ import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 
-__version__ = "1.3.1"
+__version__ = "1.3.2"
 TOOL_ID = f"chainshot-py/{__version__}"
 
 # --------------------------------------------------------------------------- #

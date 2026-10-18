@@ -183,15 +183,27 @@ Describe 'ChainShot' {
             Test-ChainShotCase -CasePath $c -Quiet | Should -BeTrue
         }
 
-        It 'creates a Start menu shortcut that uses the ChainShot icon' {
+        It 'creates shortcuts to a launcher named ChainShot with its icon' {
             if (-not $script:IsWin) { Set-ItResult -Skipped -Because 'Windows only'; return }
-            Install-ChainShotShortcut | Out-Null
-            $path = Join-Path ([Environment]::GetFolderPath('Programs')) 'ChainShot Tray (PowerShell).lnk'
-            try {
-                $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($path)
-                $lnk.IconLocation | Should -Match 'chainshot\.ico,0$'
-                Test-Path ($lnk.IconLocation -replace ',0$', '') | Should -BeTrue
-            } finally { Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue }
+            $dir = Join-Path ([IO.Path]::GetTempPath()) ("cs-lnk-" + [guid]::NewGuid())
+            New-Item -ItemType Directory -Path $dir | Out-Null
+            Install-ChainShotShortcut -Folder $dir | Out-Null
+            $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $dir 'ChainShot Tray (PowerShell).lnk'))
+            # Task Manager > Startup apps shows the file description and icon of the target.
+            $lnk.TargetPath | Should -Match 'ChainShotTray\.exe$'
+            $info = (Get-Item -LiteralPath $lnk.TargetPath).VersionInfo
+            $info.FileDescription | Should -BeExactly 'ChainShot'
+            $info.ProductName | Should -BeExactly 'ChainShot'
+            $info.FileVersion | Should -BeExactly ((Get-Module ChainShot).Version.ToString() + '.0')
+            $lnk.IconLocation | Should -Match 'ChainShotTray\.exe,0$'
+            Add-Type -AssemblyName System.Drawing
+            $icon = [Drawing.Icon]::ExtractAssociatedIcon($lnk.TargetPath)
+            $default = [Drawing.Icon]::ExtractAssociatedIcon((Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'))
+            $icon.Width | Should -BeGreaterThan 0
+            # Its own icon, not the PowerShell one.
+            $png = { param($i) $ms = New-Object IO.MemoryStream; $i.ToBitmap().Save($ms, [Drawing.Imaging.ImageFormat]::Png); [Convert]::ToBase64String($ms.ToArray()) }
+            (& $png $icon) | Should -Not -BeExactly (& $png $default)
+            Remove-Item -Recurse -Force $dir
         }
 
         It 'starts the tray application and registers its hotkeys' {

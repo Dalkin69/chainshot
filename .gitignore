@@ -6,3 +6,6 @@ dist/
 .journal.lock
 .DS_Store
 Thumbs.db
+
+# Built by Install-ChainShotShortcut next to the module
+windows/ChainShot/ChainShotTray.exe

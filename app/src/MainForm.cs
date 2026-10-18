@@ -176,6 +176,7 @@ namespace ChainShot
                 try
                 {
                     if (link.Checked) BrowserLink.Register(Application.ExecutablePath); else BrowserLink.Unregister();
+                    SyncAppsEntry();
                     SetStatus(link.Checked ? "Browser link on: in the ChainShot extension, choose \"ChainShot app\" to save captures into this case."
                                            : "Browser link off.");
                 }
@@ -474,6 +475,7 @@ namespace ChainShot
             {
                 try { BrowserLink.Register(Application.ExecutablePath); } catch (Exception) { /* optional feature */ }
             }
+            if (!unattended) SyncAppsEntry(); // also follows ChainShot.exe when it is moved or updated
             WatchState();
             hotkeys = new HotkeyWindow();
             hotkeys.Pressed += id => DoCapture(id == HotWindow ? CaptureMode.Window : id == HotRegion ? CaptureMode.Region : CaptureMode.Screen, Source.Hotkey);
@@ -1215,19 +1217,13 @@ namespace ChainShot
 
         void UninstallFromGui()
         {
-            var r = MessageBox.Show(this,
-                "This removes from this computer, for the current user:\n\n" +
-                "  - the Start menu shortcut and the start with Windows entry\n" +
-                "  - the browser link (registry entries and manifests)\n" +
-                "  - ChainShot settings in %APPDATA%\\ChainShot (recent cases, current case and tag)\n\n" +
-                "Your case folders are NOT touched. ChainShot then closes; delete ChainShot.exe to finish.\n\nContinue?",
-                "ChainShot - uninstall", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
-            if (r != DialogResult.OK) return;
-            var done = Uninstaller.Run(false);
-            MessageBox.Show(this, "Removed:\n" + string.Join("\n", done) + "\n\nYou can now delete " + Application.ExecutablePath,
-                "ChainShot - uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            Start("explorer.exe", "/select,\"" + Application.ExecutablePath + "\"");
-            Quit();
+            if (Uninstaller.Interactive(this)) Quit();
+        }
+
+        /// <summary>Keeps the "Installed apps" entry in line with what ChainShot changed on the computer.</summary>
+        static void SyncAppsEntry()
+        {
+            try { Uninstaller.SyncAppsEntry(Application.ExecutablePath); } catch (Exception) { /* not essential */ }
         }
 
         public const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -1246,6 +1242,7 @@ namespace ChainShot
                     if (enable) k.SetValue("ChainShot", "\"" + Application.ExecutablePath + "\" --minimized");
                     else k.DeleteValue("ChainShot", false);
                 }
+                SyncAppsEntry();
                 SetStatus(enable ? "ChainShot will start in the tray when you sign in." : "ChainShot will not start with Windows.");
             }
             catch (Exception ex) { Ui.Error(this, ex.Message); }
@@ -1266,6 +1263,7 @@ namespace ChainShot
                 st.InvokeMember("IconLocation", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { Application.ExecutablePath + ",0" });
                 st.InvokeMember("Description", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { "ChainShot - timestamped, hash-chained forensic screenshots" });
                 st.InvokeMember("Save", System.Reflection.BindingFlags.InvokeMethod, null, sc, null);
+                SyncAppsEntry();
                 if (interactive) MessageBox.Show("ChainShot was added to the Start menu:\n" + lnk + "\n\nIf you move ChainShot.exe, add it again.", "ChainShot", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return lnk;
             }

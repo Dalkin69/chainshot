@@ -66,7 +66,9 @@
       <li>Valeurs de registre, pour l'utilisateur courant uniquement et seulement à votre demande : démarrage avec Windows
         (<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</code>) et lien navigateur
         (<code>HKCU\Software\&lt;navigateur&gt;\NativeMessagingHosts\com.chainshot.host</code>, demandé au premier démarrage).
-        <em>Options &gt; Uninstall from this computer</em> ou <code>ChainShot.exe uninstall</code> les supprime toutes.</li>
+        Dès que l'une d'elles existe, ChainShot apparaît dans <em>Paramètres &gt; Applications &gt; Applications installées</em>
+        (<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ChainShot</code>). Le désinstaller depuis là, ou
+        <em>Options &gt; Uninstall from this computer</em>, les supprime toutes et peut supprimer <code>ChainShot.exe</code>.</li>
       <li>Les captures contiennent ce qui est à l'écran et peuvent inclure des données personnelles. Conservez les dossiers de cas
         sur des supports que vous maîtrisez et appliquez les règles de votre organisation sur les preuves et les données personnelles.</li>
     </ul>
