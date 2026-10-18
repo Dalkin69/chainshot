@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chainshot"
-version = "1.3.1"
+version = "1.3.2"
 description = "Tamper-evident, hash-chained journal for forensic screenshots and files: verify, seal (RFC 3161), HTML report."
 readme = "README.md"
 license = { text = "MIT" }

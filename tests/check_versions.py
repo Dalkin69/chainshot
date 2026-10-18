@@ -25,6 +25,7 @@ found = {
     "extension/manifest.json": json.loads((ROOT / "extension/manifest.json").read_text(encoding="utf-8"))["version"],
     "app/ChainShot.csproj": grab("app/ChainShot.csproj", r"<Version>([^<]+)</Version>"),
     "app/src/AppInfo.cs": grab("app/src/AppInfo.cs", r'Version = "([^"]+)"'),
+    "windows/ChainShot/ChainShotTray.cs": (grab("windows/ChainShot/ChainShotTray.cs", r'AssemblyFileVersion\("([^"]+)\.0"\)') or ""),
     "app/app.manifest": (grab("app/app.manifest", r'assemblyIdentity version="([^"]+)\.0"') or ""),
 }
 versions = set(found.values())

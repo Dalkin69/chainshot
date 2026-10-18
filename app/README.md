@@ -99,9 +99,25 @@ Deleting them resets the application; cases are never stored there.
 
 ## Uninstall
 
-*Options > Uninstall from this computer* (or `ChainShot.exe uninstall`) removes the Start menu shortcut, start with
-Windows, the browser link and the settings; then delete `ChainShot.exe`. Case folders are never touched.
-Scoop runs the same command when you uninstall it.
+ChainShot has no installer and writes nothing outside your user profile. As soon as it has changed something on
+the computer (browser link, start with Windows, Start menu shortcut), it is listed in **Settings > Apps > Installed
+apps**, so it can be removed from there like any other program.
+
+| What | Where | When |
+| --- | --- | --- |
+| Settings | `%APPDATA%\ChainShot` (`gui.json`, `state.json`) | first start |
+| Browser link | `HKCU\Software\<browser>\NativeMessagingHosts\com.chainshot.host` and its manifests in `%APPDATA%\ChainShot` | if you accept it (asked at first start) |
+| Start with Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\ChainShot` | Options > Start with Windows |
+| Start menu shortcut | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\ChainShot.lnk` | Options > Add ChainShot to the Start menu |
+| Installed apps entry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ChainShot` | with any of the three above |
+
+To remove all of it: **Settings > Apps > Installed apps > ChainShot > Uninstall**, or *Options > Uninstall from this
+computer*. ChainShot lists what it will remove, removes it, then offers to delete `ChainShot.exe` (with the other files
+of the zip and their folder, when nothing else is in it). Command line: `ChainShot.exe uninstall --delete-exe`.
+Case folders are never touched.
+
+Scoop runs `ChainShot.exe uninstall` when you uninstall ChainShot. With winget, run *Options > Uninstall from this
+computer* first, then `winget uninstall Dalkin69.ChainShot`.
 
 ## Build from source
 

@@ -46,8 +46,10 @@ Links in the Help menu open this repository in your web browser; nothing is sent
 - The app writes these registry values, for the current user only: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\ChainShot`
   when you enable *Start with Windows*, and `HKCU\Software\<browser>\NativeMessagingHosts\com.chainshot.host` for the
   browser link (asked at first start; Options > Accept captures from the browser extension), plus
-  `HKCU\Software\Mozilla\NativeMessagingHosts\com.chainshot.host` for Firefox. *Options > Uninstall from this computer*
-  (or `ChainShot.exe uninstall`) removes all of them.
+  `HKCU\Software\Mozilla\NativeMessagingHosts\com.chainshot.host` for Firefox. Once one of these exists (or the Start
+  menu shortcut), ChainShot lists itself in Settings > Apps > Installed apps
+  (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ChainShot`). Uninstalling it there, or *Options >
+  Uninstall from this computer* (`ChainShot.exe uninstall`), removes all of them and can delete `ChainShot.exe`.
 - Captures contain what is on your screen: like any screenshot, they may include personal data. Store case folders
   on media you control and apply your organisation's rules on evidence and personal data.
 

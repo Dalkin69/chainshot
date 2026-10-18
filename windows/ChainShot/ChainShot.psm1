@@ -14,7 +14,7 @@
 
 Set-StrictMode -Version 2.0
 
-$script:Version       = '1.3.1'
+$script:Version       = '1.3.2'
 $script:ToolId        = "chainshot-ps/$($script:Version)"
 $script:FormatVersion = '1'
 $script:JournalName   = 'journal.jsonl'
@@ -1034,28 +1034,59 @@ function Start-ChainShotTray {
     }
 }
 
+function New-ChainShotLauncher {
+    # Compiles ChainShotTray.exe (ChainShotTray.cs, next to this module) with the C# compiler of the
+    # .NET Framework 4.x that ships with Windows. Returns its path, or $null if no compiler was found.
+    param([string]$Directory = $PSScriptRoot)
+    $src = Join-Path $PSScriptRoot 'ChainShotTray.cs'
+    $ico = Join-Path $PSScriptRoot 'chainshot.ico'
+    $csc = @('Framework64', 'Framework') | ForEach-Object { Join-Path $env:WINDIR "Microsoft.NET\$_\v4.0.30319\csc.exe" } |
+        Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if (-not $csc -or -not (Test-Path -LiteralPath $src)) { return $null }
+    $out = Join-Path $Directory 'ChainShotTray.exe'
+    $arguments = @('/nologo', '/noconfig', '/optimize+', '/target:winexe', "/out:$out", '/r:System.dll')
+    if (Test-Path -LiteralPath $ico) { $arguments += "/win32icon:$ico" }
+    $log = & $csc @arguments $src 2>&1
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $out)) {
+        Write-Warning "Could not build the ChainShot launcher: $($log -join ' ')"
+        return $null
+    }
+    return $out
+}
+
 function Install-ChainShotShortcut {
     <#
     .SYNOPSIS
         Creates Start menu (and optionally Startup) shortcuts that launch the tray application.
+    .DESCRIPTION
+        The shortcuts start ChainShotTray.exe, a small launcher built next to the module, so that
+        Windows (Start menu, Task Manager > Startup apps) shows "ChainShot" and its icon. Without
+        the .NET Framework compiler they fall back to powershell.exe.
     #>
     [CmdletBinding()]
-    param([switch]$Startup)
+    param([switch]$Startup, [string[]]$Folder)
     Assert-Windows
-    $exe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $manifest = Join-Path $PSScriptRoot 'ChainShot.psd1'
-    $arguments = '-NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Import-Module ''{0}''; Start-ChainShotTray"' -f $manifest
+    $ico = Join-Path $PSScriptRoot 'chainshot.ico'
+    $launcher = New-ChainShotLauncher
     $ws = New-Object -ComObject WScript.Shell
-    $targets = @([Environment]::GetFolderPath('Programs'))
-    if ($Startup) { $targets += [Environment]::GetFolderPath('Startup') }
+    $targets = if ($Folder) { $Folder } else { @([Environment]::GetFolderPath('Programs')) }
+    if ($Startup -and -not $Folder) { $targets += [Environment]::GetFolderPath('Startup') }
     foreach ($dir in $targets) {
-        $lnk = $ws.CreateShortcut((Join-Path $dir $script:ShortcutName))
-        $lnk.TargetPath = $exe; $lnk.Arguments = $arguments; $lnk.WindowStyle = 7
-        $ico = Join-Path $PSScriptRoot 'chainshot.ico'
-        if (Test-Path -LiteralPath $ico) { $lnk.IconLocation = "$ico,0" }
+        $path = Join-Path $dir $script:ShortcutName
+        $lnk = $ws.CreateShortcut($path)
+        if ($launcher) {
+            $lnk.TargetPath = $launcher; $lnk.Arguments = ''; $lnk.IconLocation = "$launcher,0"
+        } else {
+            $lnk.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+            $lnk.Arguments = '-NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Import-Module ''{0}''; Start-ChainShotTray"' -f $manifest
+            $lnk.WindowStyle = 7
+            if (Test-Path -LiteralPath $ico) { $lnk.IconLocation = "$ico,0" }
+        }
+        $lnk.WorkingDirectory = $PSScriptRoot
         $lnk.Description = 'ChainShot - timestamped, hash-chained forensic screenshots'
         $lnk.Save()
-        Write-Host "Shortcut created: $(Join-Path $dir $script:ShortcutName)"
+        Write-Host "Shortcut created: $path"
     }
 }
 
