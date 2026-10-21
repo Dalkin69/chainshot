@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // ChainShot journal format v1 - browser implementation.
 // Must produce exactly the same canonical text, entry hashes and chain values
-// as python/chainshot.py and the PowerShell module (see docs/journal-format.md
+// as python/chainshot.py and the PowerShell module (see Journal format in README.md
 // and tests/vectors/canonical-vectors.json). Runs in the extension service
 // worker and in Node 18+ (used by the tests).
 

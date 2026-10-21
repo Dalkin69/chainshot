@@ -1,3 +1,0 @@
-User-agent: *
-Allow: /
-Sitemap: https://dalkin69.github.io/chainshot/sitemap.xml

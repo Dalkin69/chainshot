@@ -347,9 +347,23 @@ def evidence_package():
     assert last["tag"] == "PACKAGE" and cs.file_hashes(out)[0] in last["note"], last
 
 
+# Neutral web page captured in an Edge window (demo data, documentation IP ranges).
+DEMO_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Account activity - Example Corp portal</title>
+<style>body{margin:0;font:15px/1.5 "Segoe UI",sans-serif;background:#f4f6f9;color:#1d2433}
+header{background:#0f3d6e;color:#fff;padding:14px 28px;font-weight:600}main{padding:22px 28px}
+table{border-collapse:collapse;width:100%;background:#fff}th,td{padding:9px 12px;border-bottom:1px solid #e6e9ef;text-align:left}
+.warn{color:#b3261e;font-weight:600}</style></head><body><header>Example Corp - Employee portal</header><main>
+<h1>Account activity: j.martin</h1><p>Sign-ins of the last 7 days (demo data).</p><table>
+<tr><th>Date (UTC)</th><th>Source address</th><th>Device</th><th>Result</th></tr>
+<tr><td>2026-10-13 08:03</td><td>198.51.100.24</td><td>Windows - Edge</td><td>Success</td></tr>
+<tr><td>2026-10-14 02:41</td><td>203.0.113.77</td><td>Unknown - Firefox</td><td class="warn">Success (new device)</td></tr>
+<tr><td>2026-10-14 02:44</td><td>203.0.113.77</td><td>Unknown - Firefox</td><td class="warn">Password changed</td></tr>
+</table></main></body></html>"""
+
+
 @test
 def demo_case_screenshot():
-    """Clean cases for the README screenshots (docs/img/app-*.png)."""
+    """Clean cases for the README screenshots (website images)."""
     import time
     d = OUT / "demo"
     run("new-case", d, "--case", "DEMO-01 Workstation PC-042", "--examiner", "Analyst")
@@ -363,7 +377,9 @@ def demo_case_screenshot():
                              Path(os.environ.get("ProgramFiles", "")) / "Microsoft/Edge/Application/msedge.exe") if p.exists()), None)
     browser = None
     if edge:
-        page = (REPO / "docs" / "demo" / "activity.html").resolve().as_uri()
+        demo = OUT / "activity.html"
+        demo.write_text(DEMO_PAGE, encoding="utf-8")
+        page = demo.resolve().as_uri()
         browser = subprocess.Popen([str(edge), f"--app={page}", "--window-size=900,560", "--window-position=60,60",
                                     "--no-first-run", "--disable-features=msEdgeSidebarV2", f"--user-data-dir={OUT / 'edge-profile'}"])
         time.sleep(6)

@@ -73,7 +73,7 @@ ManifestVersion: 1.6.0
 Publisher: Dalkin69
 PublisherUrl: https://github.com/Dalkin69
 PublisherSupportUrl: {REPO}/issues
-PrivacyUrl: {REPO}/blob/main/PRIVACY.md
+PrivacyUrl: https://dalkin69.github.io/chainshot/privacy.html
 Author: Dalkin69
 PackageName: ChainShot
 PackageUrl: {REPO}

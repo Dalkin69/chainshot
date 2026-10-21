@@ -20,7 +20,7 @@ namespace ChainShot
         const string PowerShellAppsKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ChainShot.PowerShell";
 
         /// <summary>Files of the release zip, deleted with ChainShot.exe when they are alone in its folder.</summary>
-        static readonly string[] ZipFiles = { "ChainShot.exe", "README.md", "LICENSE", "PRIVACY.md" };
+        static readonly string[] ZipFiles = { "ChainShot.exe", "ChainShot.exe.config", "README.md", "LICENSE", "PRIVACY.md" };
 
         static string StartMenuShortcut
         {

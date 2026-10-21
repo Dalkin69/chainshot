@@ -10,7 +10,7 @@
 //
 // Destination "app": captures go instead into the case open in ChainShot.exe (or the one
 // selected with `chainshot.py use`), through Chrome native messaging. The banner is drawn
-// here; the app hashes, names and chains the file. Protocol: docs/browser-link.md.
+// here; the app hashes, names and chains the file. Protocol: Browser link in README.md.
 
 import {
   FORMAT_VERSION, GENESIS, CHAINED_FIELDS, sanitize, nextChain, sha256Hex,
