@@ -179,6 +179,24 @@ def png_size(p):
     return int.from_bytes(b[16:20], "big"), int.from_bytes(b[20:24], "big")
 
 
+def banner_stats(p, shot_height):
+    """Pixels of the banner area: (black, yellow first line, light grey text) counts."""
+    from PIL import Image
+    im = Image.open(p).convert("RGB")
+    w, h = im.size
+    black = yellow = grey = 0
+    for y in range(shot_height, h):
+        for x in range(w):
+            r, g, b = im.getpixel((x, y))
+            if r < 20 and g < 20 and b < 20:
+                black += 1
+            elif r > 200 and g > 170 and b < 90:
+                yellow += 1
+            elif r > 150 and abs(r - g) < 20 and abs(g - b) < 20:
+                grey += 1
+    return black, yellow, grey
+
+
 # --------------------------------------------------------------------------- tests
 @test
 def capture_into_downloads_case():
@@ -196,6 +214,9 @@ def capture_into_downloads_case():
     w, h = png_size(d / e["file"])
     sw, sh = map(int, e["extra"]["viewport"].split("x"))
     assert w == sw and h > sh, (w, h, e["extra"])
+    # The banner is really drawn: a black band with the yellow first line and grey text.
+    black, yellow, grey = banner_stats(d / e["file"], sh)
+    assert black > w * 20 and yellow > 200 and grey > 200, f"banner pixels black={black} yellow={yellow} grey={grey} size={w}x{h} shot={sw}x{sh}"
     code, out = py("verify", d)
     assert "ALL EVIDENCE INTACT" in out, out
 

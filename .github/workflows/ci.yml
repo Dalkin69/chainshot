@@ -165,7 +165,7 @@ jobs:
         run: npx --yes web-ext@8 lint --source-dir dist/extension-firefox
       - name: End-to-end tests in Firefox (capture, full page, browser link with chainshot.py)
         run: |
-          python -m pip install --quiet selenium
+          python -m pip install --quiet selenium pillow
           firefox --version
           python tests/firefox_e2e.py dist/extension-firefox
 
