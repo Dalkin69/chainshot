@@ -28,7 +28,7 @@ make tampering impossible, and it does not protect the examiner's computer.
   (some forensic tools still display it).
 - **No network access** except the optional RFC 3161 request, sent to the authority you choose.
 - **No dependency** in the verifier, so it can be audited and run offline.
-- **No telemetry** of any kind ([PRIVACY.md](PRIVACY.md)).
+- **No telemetry** of any kind ([privacy policy](https://dalkin69.github.io/chainshot/privacy.html)).
 - The browser extension has no host permission: it cannot read pages in the background and can
   capture a tab only after a click or its keyboard shortcut.
 - **Browser link** (native messaging): the browser starts the host (`ChainShot.exe` or

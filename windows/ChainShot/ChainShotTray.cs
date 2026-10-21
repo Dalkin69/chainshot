@@ -13,8 +13,8 @@ using System.Reflection;
 [assembly: AssemblyDescription("ChainShot tray (PowerShell module)")]
 [assembly: AssemblyCompany("ChainShot contributors")]
 [assembly: AssemblyCopyright("MIT license")]
-[assembly: AssemblyVersion("1.3.2.0")]
-[assembly: AssemblyFileVersion("1.3.2.0")]
+[assembly: AssemblyVersion("1.3.3.0")]
+[assembly: AssemblyFileVersion("1.3.3.0")]
 
 static class ChainShotTray
 {

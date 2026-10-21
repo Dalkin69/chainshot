@@ -28,26 +28,23 @@ jobs:
           set -euo pipefail
           v="${GITHUB_REF_NAME}"
           test "v$(python3 tests/check_versions.py --print)" = "$v" || { echo "::error::tag $v does not match the version in the sources"; exit 1; }
-          cp LICENSE PRIVACY.md app/README.md dist/app/
+          cp LICENSE README.md dist/app/
           (cd dist/app && zip -qr "../chainshot-app-${v}.zip" .)
           mkdir -p dist/ps/ChainShot
           cp -r windows/ChainShot/* dist/ps/ChainShot/
           cp python/chainshot.py dist/ps/ChainShot/
-          cp windows/Install-ChainShot.ps1 windows/Uninstall-ChainShot.ps1 windows/README.md LICENSE PRIVACY.md dist/ps/
+          cp windows/Install-ChainShot.ps1 windows/Uninstall-ChainShot.ps1 LICENSE README.md dist/ps/
           (cd dist/ps && zip -qr "../chainshot-powershell-${v}.zip" .)
           # Browser extension: Chromium (unpacked), Chrome Web Store / Edge Add-ons, Firefox (AMO).
           python3 tools/build_extension.py --out dist --zip "$v"
           cp python/chainshot.py dist/chainshot.py
           (cd dist && sha256sum chainshot-app-${v}.zip chainshot-powershell-${v}.zip chainshot-extension-${v}.zip chainshot-extension-store-${v}.zip chainshot-extension-firefox-${v}.zip chainshot.py > SHA256SUMS.txt)
           cat dist/SHA256SUMS.txt
-      - name: Release notes from CHANGELOG (if the release has no description)
+      - name: Release notes from the merged pull requests (if the release has no description)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          awk -v ver="${GITHUB_REF_NAME#v}" '
-            $0 ~ "^## \\[" ver "\\]" {on=1; next}
-            on && /^## \[/ {exit}
-            on {print}' CHANGELOG.md > notes.md
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$GITHUB_REF_NAME" --jq .body > notes.md
           printf '\n---\nVerify downloads with `sha256sum -c SHA256SUMS.txt`.\n' >> notes.md
           body="$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)"
           if [ -z "$body" ]; then gh release edit "$GITHUB_REF_NAME" --notes-file notes.md; fi
@@ -76,20 +73,21 @@ jobs:
           gh release download "$GITHUB_REF_NAME" -p SHA256SUMS.txt -D "$RUNNER_TEMP"
           sha=$(awk -v f="chainshot-app-${GITHUB_REF_NAME}.zip" '$2==f {print $1}' "$RUNNER_TEMP/SHA256SUMS.txt")
           test -n "$sha"
-          python3 packaging/update_manifests.py "$v" "$sha" --date "$(date -u +%F)"
-          (cd "packaging/winget/manifests/d/Dalkin69/ChainShot/$v" && zip -q "$RUNNER_TEMP/winget-manifests-${GITHUB_REF_NAME}.zip" *.yaml)
+          python3 packaging/update_manifests.py "$v" "$sha" --date "$(date -u +%F)" --root "$RUNNER_TEMP/pm"
+          cp "$RUNNER_TEMP/pm/bucket/chainshot.json" bucket/chainshot.json
+          (cd "$RUNNER_TEMP/pm/packaging/winget/manifests/d/Dalkin69/ChainShot/$v" && zip -q "$RUNNER_TEMP/winget-manifests-${GITHUB_REF_NAME}.zip" *.yaml)
           gh release upload "$GITHUB_REF_NAME" --clobber "$RUNNER_TEMP/winget-manifests-${GITHUB_REF_NAME}.zip"
-      - name: Commit them to main (Scoop reads bucket/chainshot.json from there)
+      - name: Commit the Scoop manifest to main (Scoop reads bucket/chainshot.json from there)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add bucket packaging/winget
-          git commit -m "Scoop and winget manifests for ${GITHUB_REF_NAME}" || exit 0
-          git push origin HEAD:main || echo "::warning::Could not push the manifests to main (branch protection?). Commit bucket/ and packaging/winget/ from the release asset winget-manifests-${GITHUB_REF_NAME}.zip."
+          git add bucket
+          git commit -m "Scoop manifest for ${GITHUB_REF_NAME}" || exit 0
+          git push origin HEAD:main || echo "::warning::Could not push bucket/chainshot.json to main (branch protection?)."
       - uses: actions/upload-artifact@v4
         with:
           name: winget-manifests
-          path: packaging/winget/manifests
+          path: ${{ runner.temp }}/pm/packaging/winget/manifests
 
   # Submits the new version to microsoft/winget-pkgs when a WINGET_TOKEN secret exists
   # (classic token with public_repo scope).
@@ -101,7 +99,7 @@ jobs:
     steps:
       - name: No token configured
         if: env.WINGET_TOKEN == ''
-        run: echo "::notice::WINGET_TOKEN secret not set; submit packaging/winget manifests by hand."
+        run: echo "::notice::WINGET_TOKEN secret not set; submit the winget-manifests zip of the release by hand."
       - uses: actions/download-artifact@v4
         if: env.WINGET_TOKEN != ''
         with:

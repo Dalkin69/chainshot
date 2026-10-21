@@ -3,7 +3,7 @@
 //
 // The browser starts `ChainShot.exe chrome-extension://<id>/` (Chrome native messaging) and
 // exchanges length-prefixed JSON messages on stdin/stdout. Same protocol as
-// `chainshot.py native-host`, specified in docs/browser-link.md.
+// `chainshot.py native-host`, specified in README.md (Browser link).
 
 using System;
 using System.Collections.Generic;

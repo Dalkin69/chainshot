@@ -1,13 +1,16 @@
-# Publishes site/ to GitHub Pages (Settings > Pages > Source: GitHub Actions).
-# The README illustrations in docs/img are copied at build time, so the site and the
-# repository always show the same screenshots.
+# Publishes the website (https://dalkin69.github.io/chainshot/) from the `website` branch, which holds
+# the HTML pages and the screenshots, to GitHub Pages. Started by a push to `website` (its own small
+# workflow dispatches this one) or by hand.
+# Search engine verification, from repository variables (Settings > Secrets and variables > Actions >
+# Variables): GOOGLE_SITE_VERIFICATION (token, meta tag, or the content of Google's HTML file
+# "google-site-verification: googleXXXX.html") and BING_SITE_VERIFICATION.
 name: Website
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
-    paths: ['site/**', 'docs/img/**', 'extension/icons/**', '.github/workflows/pages.yml']
-  workflow_dispatch:
+    paths: ['.github/workflows/pages.yml']
 
 permissions:
   contents: read
@@ -26,32 +29,26 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: website
+          path: website
       - name: Build
         env:
           GOOGLE: ${{ vars.GOOGLE_SITE_VERIFICATION }}
           BING: ${{ vars.BING_SITE_VERIFICATION }}
         run: |
-          mkdir -p _site/img
-          cp -r site/* _site/
-          cp docs/img/*.png extension/icons/icon128.png _site/img/
-          # Search engine ownership tags, from repository variables (Settings > Secrets and
-          # variables > Actions > Variables): GOOGLE_SITE_VERIFICATION, BING_SITE_VERIFICATION.
-          # Each variable may hold the bare token, the whole <meta> tag, or (Google "HTML file"
-          # method) the file content "google-site-verification: googleXXXX.html".
+          mkdir _site
+          rsync -a --exclude .git --exclude .github website/ _site/
           token() { printf '%s' "$1" | sed -E 's/.*content="([^"]*)".*/\1/' | tr -d '\r\n "<>'; }
           tags=""
           if [ -n "$GOOGLE" ]; then
             gfile=$(printf '%s' "$GOOGLE" | grep -oE 'google[0-9a-f]+\.html' | head -1 || true)
-            if [ -n "$gfile" ]; then
-              printf 'google-site-verification: %s' "$gfile" > "_site/$gfile"
-              echo "Google verification file: $gfile"
-            else
-              tags="$tags<meta name=\"google-site-verification\" content=\"$(token "$GOOGLE")\">"
-            fi
+            if [ -n "$gfile" ]; then printf 'google-site-verification: %s' "$gfile" > "_site/$gfile"
+            else tags="$tags<meta name=\"google-site-verification\" content=\"$(token "$GOOGLE")\">"; fi
           fi
           if [ -n "$BING" ]; then tags="$tags<meta name=\"msvalidate.01\" content=\"$(token "$BING")\">"; fi
           if [ -n "$tags" ]; then sed -i "s|<meta charset=\"utf-8\">|<meta charset=\"utf-8\">$tags|" _site/index.html; fi
-          # Custom domain: put it in site/CNAME (and in the repository settings).
+          ls -R _site | head -40
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -36,7 +36,7 @@ How to verify (Python 3.9 or later, nothing to install)
 3. Compare the seal SHA-256 above with the one written in the signed report
    or sent separately by the examiner. They must be identical.
 {tsa_hint}
-Documentation: https://github.com/Dalkin69/chainshot/blob/main/docs/verification.md
+Documentation: https://github.com/Dalkin69/chainshot#delivering-and-verifying-a-case
 
 ---
 

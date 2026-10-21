@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // ChainShot journal format v1 - C# implementation used by ChainShot.exe.
 // Must hash exactly like python/chainshot.py, the PowerShell module and the browser
-// extension: docs/journal-format.md is the specification and
+// extension: the Journal format section of README.md is the specification and
 // tests/vectors/canonical-vectors.json the executable contract (see SelfTest).
 
 using System;

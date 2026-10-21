@@ -189,8 +189,8 @@ namespace ChainShot
 
             var help = new ToolStripMenuItem("&Help");
             help.DropDownItems.Add(Item("&Documentation", (s, e) => OpenUrl(AppInfo.RepoUrl + "#readme")));
-            help.DropDownItems.Add(Item("How to &verify a case independently", (s, e) => OpenUrl(AppInfo.RepoUrl + "/blob/main/docs/verification.md")));
-            help.DropDownItems.Add(Item("Journal &format", (s, e) => OpenUrl(AppInfo.RepoUrl + "/blob/main/docs/journal-format.md")));
+            help.DropDownItems.Add(Item("How to &verify a case independently", (s, e) => OpenUrl(AppInfo.RepoUrl + "#delivering-and-verifying-a-case")));
+            help.DropDownItems.Add(Item("Journal &format", (s, e) => OpenUrl(AppInfo.RepoUrl + "#journal-format")));
             help.DropDownItems.Add(new ToolStripSeparator());
             help.DropDownItems.Add(Item("&About ChainShot", (s, e) => MessageBox.Show(this,
                 "ChainShot " + AppInfo.Version + "\n\nTimestamped, hash-chained screenshots and evidence journal.\n" +

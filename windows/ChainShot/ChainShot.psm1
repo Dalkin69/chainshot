@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # ChainShot PowerShell module - timestamped, hash-chained forensic screenshots.
 #
-# Journal format: docs/journal-format.md. Every entry written here must hash
+# Journal format: README.md (Journal format). Every entry written here must hash
 # exactly like the Python reference implementation (python/chainshot.py) and
 # the browser extension; tests/vectors/canonical-vectors.json is the contract.
 #
@@ -14,7 +14,7 @@
 
 Set-StrictMode -Version 2.0
 
-$script:Version       = '1.3.2'
+$script:Version       = '1.3.3'
 $script:ToolId        = "chainshot-ps/$($script:Version)"
 $script:FormatVersion = '1'
 $script:JournalName   = 'journal.jsonl'

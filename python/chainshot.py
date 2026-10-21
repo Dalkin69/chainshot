@@ -4,7 +4,7 @@
 ChainShot - tamper-evident evidence journal for forensic screenshots and files.
 
 This single file is the reference implementation of the ChainShot journal
-format (see docs/journal-format.md). It only uses the Python standard library
+format (see the Journal format section of README.md). It only uses the Python standard library
 so that an auditor can copy it anywhere and verify a case folder without
 installing anything or trusting the tool that produced the evidence.
 
@@ -48,11 +48,11 @@ import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 
-__version__ = "1.3.2"
+__version__ = "1.3.3"
 TOOL_ID = f"chainshot-py/{__version__}"
 
 # --------------------------------------------------------------------------- #
-# Journal format v1 (keep in sync with docs/journal-format.md, the PowerShell
+# Journal format v1 (keep in sync with the README specification, the PowerShell
 # module and the browser extension: all three must produce identical hashes).
 # --------------------------------------------------------------------------- #
 FORMAT_VERSION = "1"
@@ -872,7 +872,7 @@ How to verify (Python 3.9 or later, nothing to install)
 3. Compare the seal SHA-256 above with the one written in the signed report
    or sent separately by the examiner. They must be identical.
 {tsa_hint}
-Documentation: https://github.com/Dalkin69/chainshot/blob/main/docs/verification.md
+Documentation: https://github.com/Dalkin69/chainshot#delivering-and-verifying-a-case
 
 ---
 
@@ -954,7 +954,7 @@ def cmd_package(args) -> int:
 
 # --------------------------------------------------------------------------- #
 # Browser link: the extension saves captures into the current case
-# (Chrome native messaging, see docs/browser-link.md)
+# (Chrome native messaging, see Browser link in README.md)
 # --------------------------------------------------------------------------- #
 HOST_NAME = "com.chainshot.host"
 HOST_PROTOCOL = 2  # 2: "format": "mhtml" page archives
