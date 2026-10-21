@@ -1,0 +1,17 @@
+# Any change to the website starts the "Website" workflow of main, which publishes this branch.
+name: Publish website
+
+on:
+  push:
+    branches: [website]
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main --repo "$GITHUB_REPOSITORY"

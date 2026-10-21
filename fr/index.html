@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChainShot : captures d'écran horodatées et chaînées par hash pour les rapports forensic</title>
+<meta name="description" content="ChainShot est un outil libre et gratuit qui fait des captures d'écran des preuves vérifiables : bandeau avec cas et heure UTC, SHA-256 de chaque fichier, journal chaîné, scellés RFC 3161. Application Windows, extension navigateur, PowerShell, Python. Aucune télémétrie.">
+<link rel="canonical" href="https://dalkin69.github.io/chainshot/fr/">
+<link rel="alternate" hreflang="en" href="https://dalkin69.github.io/chainshot/">
+<link rel="alternate" hreflang="fr" href="https://dalkin69.github.io/chainshot/fr/">
+<link rel="icon" href="../img/icon128.png">
+<meta property="og:title" content="ChainShot : des captures d'écran qui tiennent comme preuves">
+<meta property="og:description" content="Captures horodatées et chaînées par hash pour le forensic. Open source, sans télémétrie, vérifiables par tous avec Python.">
+<meta property="og:image" content="https://dalkin69.github.io/chainshot/img/app-window.png">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="./"><img src="../img/icon128.png" alt="">ChainShot</a>
+    <nav aria-label="Navigation principale">
+      <a href="#install">Télécharger</a>
+      <a href="#verify">Vérifier un cas</a>
+      <a href="privacy.html">Confidentialité</a>
+      <a href="https://github.com/Dalkin69/chainshot">GitHub</a>
+      <a href="../" hreflang="en" lang="en">English</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <h1>Des captures d'écran qui tiennent comme preuves.</h1>
+      <p class="lead">Une capture collée dans un rapport ne prouve rien à elle seule. ChainShot enregistre chaque
+        capture avec son heure, son cas et son examinateur, la hache et la chaîne à la précédente : n'importe qui
+        peut ensuite vérifier que rien n'a été modifié, supprimé ou re-daté.</p>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/Dalkin69/chainshot/releases/latest">Télécharger pour Windows</a>
+        <a class="btn quiet" href="#tools">Extension navigateur, PowerShell, Python</a>
+      </div>
+      <figure class="capture" style="margin:0">
+        <img src="../img/app-window.png" width="986" height="633" alt="L'application ChainShot : un cas, son badge de vérification « All evidence intact », le journal des captures, fichiers et notes, et l'aperçu d'une page web capturée">
+        <figcaption class="banner" aria-label="Exemple du bandeau de preuve que ChainShot ajoute sous chaque capture">
+          <div class="l1">#5 (capture 2) | DEMO-01 Poste PC-042 | P03 | <span id="utc">2026-10-17 09:41:07</span> UTC | Analyste @ LAB-PC</div>
+          <div>Window: Account activity - Example Corp portal [msedge]</div>
+          <div>Note: Historique des connexions du compte</div>
+        </figcaption>
+      </figure>
+    </div>
+
+    <section aria-labelledby="carries">
+      <div class="split">
+        <div>
+          <h2 id="carries">Chaque capture dit ce qu'elle est</h2>
+          <p class="intro">ChainShot dessine un bandeau sous l'image, jamais par-dessus : aucun pixel capturé n'est masqué.
+            Les mêmes informations vont dans le journal, protégées par la chaîne de hash.</p>
+          <dl class="fields">
+            <dt>#12</dt><dd>numéro d'entrée du journal, celui à citer dans le rapport</dd>
+            <dt>cas, tag</dt><dd>le cas et la question ou l'étape documentée (P17)</dd>
+            <dt>UTC</dt><dd>heure de capture, avec l'heure locale et le décalage dans le journal</dd>
+            <dt>examinateur</dt><dd>qui a capturé, sur quel ordinateur</dd>
+            <dt>URL, titre</dt><dd>pour les pages web et les fenêtres, enregistrés automatiquement</dd>
+            <dt>SHA-256</dt><dd>empreinte du PNG final, inscrite au journal</dd>
+          </dl>
+        </div>
+        <img src="../img/sample-capture-app.png" width="1000" height="521" alt="Page web capturée par l'extension ChainShot, avec le bandeau de preuve noir en dessous : numéro d'entrée, cas, tag, heure UTC, examinateur, URL, titre et note">
+      </div>
+    </section>
+
+    <section aria-labelledby="how">
+      <h2 id="how">De la capture à la preuve</h2>
+      <ol class="steps">
+        <li><h3>Capturer</h3><p>Écran, fenêtre, zone ou page web, avec un raccourci depuis n'importe quelle application. Fichiers et notes aussi.</p></li>
+        <li><h3>Hacher</h3><p>Le SHA-256 de chaque fichier est inscrit dans un journal en ajout seul.</p></li>
+        <li><h3>Chaîner</h3><p>Chaque entrée est hachée avec la précédente : modifier, supprimer ou réordonner quoi que ce soit casse la chaîne.</p></li>
+        <li><h3>Sceller</h3><p>Un scellé fige le journal ; une autorité RFC 3161 peut en certifier l'heure. Son SHA-256 va dans le rapport signé.</p></li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="tamper">
+      <h2 id="tamper">Un octet change, et ça se voit</h2>
+      <p class="intro">Le même cas, avant et après la modification de quelques octets d'une capture. ChainShot re-hache
+        chaque fichier à la vérification, et le vérificateur indépendant fait exactement la même chose.</p>
+      <div class="verdicts">
+        <figure>
+          <img src="../img/app-window.png" width="986" height="633" alt="Cas vérifié : toutes les preuves sont intactes">
+          <figcaption><b class="ok">Preuves intactes.</b> Fichiers, chaîne et scellés concordent.</figcaption>
+        </figure>
+        <figure>
+          <img src="../img/app-altered.png" width="986" height="633" alt="Le même cas après modification d'une capture : vérification échouée, hash du fichier différent pour l'entrée 5">
+          <figcaption><b class="bad">Vérification échouée.</b> Entrée #5 : le fichier ne correspond plus à son SHA-256.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="tools" aria-labelledby="tools-h">
+      <h2 id="tools-h">Un format, quatre outils</h2>
+      <p class="intro">Tous écrivent le même journal, testé sur les mêmes vecteurs : commencez un cas dans l'application,
+        ajoutez des pages web depuis le navigateur, automatisez en PowerShell, vérifiez partout.</p>
+      <div class="tools">
+        <div>
+          <h3>ChainShot pour Windows</h3>
+          <p class="for">Windows 10 et 11, un seul fichier, sans installation</p>
+          <p>Cas, captures avec raccourcis globaux, fichiers par glisser-déposer, journal avec aperçu, vérification,
+            scellés, rapport HTML et paquet de preuves pour la remise. Interface en anglais.</p>
+        </div>
+        <div>
+          <h3>Extension navigateur</h3>
+          <p class="for">Chrome, Edge, Brave, Firefox</p>
+          <p>Zone visible ou page entière, URL et titre enregistrés, archive MHTML de la page en option. Enregistre dans
+            son propre cas ou directement dans le cas ouvert dans l'application.</p>
+        </div>
+        <div>
+          <h3>Module PowerShell</h3>
+          <p class="for">Windows PowerShell 5.1 et PowerShell 7</p>
+          <p>Toutes les fonctions en commandes, pour les scripts et la ligne de commande, avec sa propre icône.</p>
+        </div>
+        <div>
+          <h3>chainshot.py</h3>
+          <p class="for">Tout système avec Python 3.9+, sans dépendance</p>
+          <p>Le vérificateur de référence : un client ou un auditeur contrôle un cas sans faire confiance à l'outil qui l'a produit.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="install" aria-labelledby="install-h">
+      <h2 id="install-h">Télécharger</h2>
+      <div class="cols">
+        <div>
+          <h3>Application Windows</h3>
+          <pre><span class="c"># winget</span>
+winget install Dalkin69.ChainShot
+
+<span class="c"># Scoop</span>
+scoop bucket add chainshot https://github.com/Dalkin69/chainshot
+scoop install chainshot</pre>
+          <p class="note">winget propose ChainShot après la validation par Microsoft ; Scoop fonctionne dès la première version.
+            Ou téléchargez <a href="https://github.com/Dalkin69/chainshot/releases/latest">le zip sur GitHub</a>, vérifiez-le
+            avec <code>SHA256SUMS.txt</code> et lancez <code>ChainShot.exe</code>. L'exécutable n'est pas encore signé :
+            Windows peut demander une confirmation au premier lancement (<a href="../code-signing.html">pourquoi</a>).</p>
+        </div>
+        <div>
+          <h3>Extension navigateur</h3>
+          <p class="note">Installez-la depuis le <a href="https://chromewebstore.google.com/detail/chainshot-forensic-web-ca/ejbdnnlgcnogepeclpknfagfhehkhgap">Chrome Web Store</a> (Chrome, Edge, Brave) ou
+            <a href="https://addons.mozilla.org/firefox/addon/chainshot-forensic-captures/">Firefox Add-ons</a>.</p>
+          <h3 style="margin-top:28px">PowerShell, Python</h3>
+          <pre>pipx install "git+https://github.com/Dalkin69/chainshot#subdirectory=python"</pre>
+          <p class="note">PowerShell : <code>chainshot-powershell-*.zip</code>, puis <code>Install-ChainShot.ps1</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="verify" aria-labelledby="verify-h">
+      <div class="split">
+        <div>
+          <h2 id="verify-h">Vous avez reçu un cas ? Vérifiez-le vous-même.</h2>
+          <p class="intro">Inutile d'avoir les outils de capture de ChainShot, Python suffit. Un paquet de preuves contient
+            déjà <code>chainshot.py</code>, un <code>VERIFY.txt</code> et le SHA-256 de chaque fichier.</p>
+          <p class="note"><a href="https://github.com/Dalkin69/chainshot#delivering-and-verifying-a-case">Guide de vérification (en anglais)</a></p>
+        </div>
+        <pre>python chainshot.py verify DEMO-01
+<span class="c">...</span>
+    9  2026-10-17T09:41:12Z  END  OK
+Seal seal-20261017T094112Z.json: OK
+  RFC 3161 imprint OK, signature valid
+
+9 entries, 0 problem(s), 1 seal(s).
+RESULT: ALL EVIDENCE INTACT</pre>
+      </div>
+    </section>
+
+    <section id="privacy" aria-labelledby="privacy-h">
+      <h2 id="privacy-h">Vos preuves restent les vôtres</h2>
+      <ul class="promises">
+        <li>Aucune télémétrie, aucune statistique, aucun compte, aucune vérification de mise à jour. ChainShot ne se connecte jamais à Internet de lui-même.</li>
+        <li>La seule requête réseau est l'horodatage RFC 3161 que vous demandez, et elle n'envoie que le SHA-256 d'un scellé.</li>
+        <li>Open source sous licence MIT. Les versions sont construites depuis le dépôt public par GitHub Actions, avec leur SHA-256.</li>
+        <li>Ce site n'utilise ni cookie, ni traceur, ni police ou script externe.</li>
+      </ul>
+      <p class="note" style="margin-top:20px"><a href="privacy.html">Politique de confidentialité</a></p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="links">
+      <a href="privacy.html">Confidentialité</a>
+      <a href="terms.html">Conditions d'utilisation</a>
+      <a href="legal.html">Mentions légales</a>
+      <a href="../code-signing.html" hreflang="en">Politique de signature du code</a>
+      <a href="https://github.com/Dalkin69/chainshot">Code source</a>
+      <a href="https://github.com/Dalkin69/chainshot/issues">Signaler un problème</a>
+    </div>
+    <p>ChainShot est un logiciel libre sous licence MIT, réalisé par <a href="https://github.com/Dalkin69">Dalkin69</a>
+      avec l'aide d'un assistant IA (Claude, Anthropic). Il est né d'un cours d'analyse forensic.</p>
+  </footer>
+</div>
+<script>
+  (function () {
+    var el = document.getElementById('utc');
+    if (el) el.textContent = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  })();
+</script>
+</body>
+</html>
